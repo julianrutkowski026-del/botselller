@@ -6,60 +6,75 @@ import BotSellerLogo from "@/components/brand/BotSellerLogo";
 import LanguageSwitcher from "@/components/i18n/LanguageSwitcher";
 import { useLanguage, type Language } from "@/components/i18n/LanguageContext";
 import MarketingFooter from "@/components/public/MarketingFooter";
-import { BOTSELLER_PLANS, formatPlanPrice } from "@/lib/pricing";
+import { BOTSELLER_PLANS, formatGrossPriceFromNet, grossAmountGrosze } from "@/lib/pricing";
 
 const copy = {
   pl: {
-    nav: ["Jak działa", "Korzyści", "Pakiety", "Bezpieczeństwo", "FAQ"],
+    nav: ["Jak działa", "Modele wdrożenia", "Korzyści", "Pakiety", "Bezpieczeństwo", "FAQ"],
     login: "Zaloguj się",
     signup: "Załóż SalesBota",
     heroPill: "FluxBase BotSeller · AI Sales Bot",
-    heroTitle: <>Twój handlowiec AI, który <em>codziennie</em> znajduje klientów i pisze do nich pierwszy</>,
+    heroTitle: <>Prospecting B2B, który <em>porządkuje</em> codzienną pracę sprzedaży</>,
     heroSub:
-      "SalesBot każdego dnia szuka dopasowanych firm, odfiltrowuje te bez kontaktu, pisze wiadomości w stylu Twojej marki i wysyła je stopniowo, bezpiecznie dla Twojej skrzynki.",
-    heroCta: "Załóż SalesBota w 10 minut",
-    heroSecondary: "Zobacz jak działa",
-    heroPoints: ["Bez śmieciowych leadów", "Wysyłka stopniowa i warm-up", "Panel klienta 24/7"],
+      "FluxBase BotSeller pomaga wyszukiwać i kwalifikować firmy, przygotowywać pierwsze wiadomości dopasowane do oferty oraz prowadzić wysyłkę według ustawień kampanii. Zespół obsługuje odpowiedzi w jednym panelu.",
+    heroCta: "Zobacz pakiety",
+    heroSecondary: "Sprawdź, jak działa",
+    heroPoints: ["Wyszukiwanie i kwalifikacja firm", "Wiadomości dopasowane do oferty", "Kontrola wysyłki i odpowiedzi"],
     mockup: {
-      top: "Panel klienta · BotSeller",
-      metrics: [["Wysłane dziś", "27", "+9 vs wczoraj"], ["Dostarczone", "98,2%", "stabilnie"], ["Odpowiedzi", "6", "+2 nowe"]],
-      chart: "Wysyłka w tym tygodniu",
-      days: "ostatnie 7 dni",
-      queue: [["Studio Meblowe Nowak", "Wiadomość dostarczona", "delivered"], ["Kancelaria LexPartner", "Odpowiedź od leada", "replied"], ["Pracownia Reklamy 360", "Zaplanowano 11:24", "queued"]],
-      floatA: ["AI pisze wiadomość", "„Dzień dobry, widziałem stronę Państwa studia…”"],
-      floatB: ["Nowa odpowiedź", "„Proszę o wycenę i szczegóły oferty.”"],
+      top: "Widok demonstracyjny · dane przykładowe",
+      metrics: [["W kolejce", "8", "przykładowe dane"], ["Status skrzynki", "Aktywna", "przykładowe dane"], ["Odpowiedzi", "6", "przykładowe dane"]],
+      chart: "Aktywność kampanii",
+      days: "przykładowy tydzień",
+      queue: [["Studio Meblowe Nowak", "Przyjęta przez serwer SMTP", "delivered"], ["Kancelaria LexPartner", "Odpowiedź od firmy", "replied"], ["Pracownia Reklamy 360", "Zaplanowano wysyłkę", "queued"]],
+      floatA: ["Wiadomość do sprawdzenia", "„Dzień dobry, przygotowujemy strony dla…”"],
+      floatB: ["Odpowiedź w panelu", "„Proszę o wycenę i szczegóły oferty.”"],
     },
-    audienceIntro: "Najlepiej działa tam, gdzie liczy się regularny pierwszy kontakt:",
+    audienceIntro: "Dla zespołów, które chcą uporządkować regularny prospecting B2B:",
     audience: ["Agencje", "Firmy usługowe", "Software house'y", "Lokalne biznesy", "B2B", "Logistyka i produkcja"],
-    seo: {
-      eyebrow: "SEO / AI Sales Bot",
-      title: "Automatyzacja maili, cold mailing i leady B2B w jednym systemie",
-      body: "FluxBase BotSeller został zaprojektowany dla firm, które szukają narzędzia typu: automatyzacja maili, bot do wysyłania maili, AI Sales Bot, cold mailing, prospecting B2B, pozyskiwanie leadów i follow-upy.",
-      topics: [
-        ["Automatyzacja maili sprzedażowych", "FluxBase BotSeller pomaga firmom, które chcą regularnie wysyłać pierwsze wiadomości do nowych klientów B2B bez ręcznego kopiowania adresów, pisania maili od zera i pilnowania follow-upów."],
-        ["Pozyskiwanie leadów B2B", "System wyszukuje firmy według branży, lokalizacji, kraju, województwa, typu działalności i zasad kwalifikacji. Dzięki temu kampania może być kierowana do konkretnych firm, a nie do przypadkowej bazy kontaktów."],
-        ["Cold mailing z AI", "AI przygotowuje wiadomości w stylu marki, z opisem oferty, argumentami sprzedażowymi i wybranym CTA. To rozwiązanie dla osób szukających narzędzia do cold mailingu, prospectingu i automatyzacji sprzedaży."],
-        ["Bezpieczna wysyłka z Gmail SMTP", "BotSeller wysyła wiadomości stopniowo, korzysta z warm-upu i działa z kontem SMTP klienta. Dzięki temu automatyczna wysyłka maili nie wygląda jak jednorazowy wystrzał z armaty spamowej."],
-      ],
-      phrasesLabel: "Najważniejsze frazy wyszukiwania",
+    deployment: {
+      eyebrow: "Modele wdrożenia",
+      title: "Wybierz, czego potrzebuje Twój biznes",
+      body: "Możesz korzystać z SalesBota w swojej firmie albo omówić przejęcie pełnej platformy FluxBase BotSeller i prowadzenie własnej sprzedaży pakietów.",
+      panelLabel: "Dla własnego zespołu",
+      panelTitle: "Panel klienta SalesBot",
+      panelBody: "Wybierasz pakiet, przekazujesz brief, a FluxBase konfiguruje skrzynkę i przygotowuje konto do pracy nad Twoimi kampaniami.",
+      panelPoints: ["Panel klienta do obsługi leadów i kampanii", "Pakiet dopasowany do limitu wysyłki", "Aktywacja po sprawdzeniu konfiguracji"],
+      panelCta: "Zobacz pakiety SalesBot",
+      platformLabel: "Dla partnera lub operatora",
+      platformTitle: "Pełna platforma FluxBase BotSeller",
+      platformBody: "Rozwiązanie dla osoby lub firmy, która chce przejąć cały produkt i sprzedawać pakiety SalesBot pod marką FluxBase BotSeller.",
+      platformPoints: ["Strona główna i formularz zamówień", "Stripe, panel klienta i panel administratora", "Supabase oraz konfiguracja wdrożenia do uzgodnienia"],
+      platformCta: "Zapytaj o pełne wdrożenie",
+      note: "Pełne wdrożenie ustalamy indywidualnie: zakres przekazania, domenę, konta płatnicze, hosting, bazę i dalszą obsługę.",
     },
-    phrases: ["automatyzacja maili", "automatyczna wysyłka maili", "automatyczne maile do klientów", "automatyczna maili", "bot do wysyłania maili", "AI sales bot", "bot sprzedażowy AI", "pozyskiwanie leadów B2B", "lead generation Polska", "cold mailing narzędzie", "prospecting B2B", "follow-up automation", "system do kampanii mailowych", "FluxBase BotSeller"],
+    seo: {
+      eyebrow: "FluxBase BotSeller",
+      title: "Od wyszukania firm do obsługi odpowiedzi — w jednym panelu",
+      body: "BotSeller łączy wyszukiwanie firm, kwalifikację kontaktów, przygotowanie wiadomości i obsługę kampanii. Ty ustalasz ofertę, odbiorców i zasady komunikacji; system realizuje skonfigurowany proces.",
+      topics: [
+        ["Wyszukiwanie według kryteriów", "Ustal branże, lokalizację i wykluczenia. SalesBot zbiera pasujące firmy oraz pomija rekordy bez adresu potrzebnego do kontaktu."],
+        ["Wiadomości dopasowane do oferty", "Przekaż opis usługi, ton komunikacji i przykład wiadomości. Treści przygotowane przez AI można sprawdzić i dopracować przed uruchomieniem kampanii."],
+        ["Wysyłka według harmonogramu", "Wiadomości trafiają do kolejki i są wysyłane w ustawionym oknie oraz limitach kampanii. Warm-up pomaga stopniowo zwiększać tempo, ale nie gwarantuje dostarczenia do głównej skrzynki odbiorczej."],
+        ["Obsługa kampanii w jednym miejscu", "Panel klienta pokazuje kontakty, wiadomości i ich statusy, a także odpowiedzi oraz zaplanowane follow-upy."],
+      ],
+    },
+    phrases: ["automatyzacja sprzedaży B2B", "automatyzacja maili B2B", "pozyskiwanie leadów B2B", "prospecting B2B", "AI Sales Bot", "cold mailing", "follow-upy sprzedażowe", "FluxBase BotSeller"],
     workflow: {
       eyebrow: "Jak działa",
-      title: "Od targetu do odpowiedzi, bez ręcznego chaosu",
-      body: "Ty ustawiasz kierunek raz. Bot powtarza cały proces każdego dnia roboczego.",
-      steps: [["01", "Wybierasz target", "Branże, kraje, miasta, typ firm i zasady kwalifikacji leadów."], ["02", "Bot znajduje firmy", "Codziennie szuka dopasowanych biznesów w wybranym obszarze."], ["03", "Bot filtruje kontakty", "Firmy bez adresu email nie trafiają do Twojego panelu."], ["04", "AI pisze wiadomość", "Treść powstaje w stylu i tonie Twojej marki, z Twoim CTA."], ["05", "System wysyła stopniowo", "Kolejka rozkłada wysyłkę w godzinach pracy, mail po mailu."], ["06", "Ty odbierasz odpowiedzi", "Panel pokazuje wysłane, dostarczone, otwarte i reakcje."]],
+      title: "Od kryteriów wyszukiwania do rozmowy z klientem",
+      body: "Ty określasz ofertę i odbiorców. BotSeller porządkuje kolejne etapy kampanii, a zespół przejmuje zainteresowane odpowiedzi.",
+      steps: [["01", "Określasz odbiorców", "Wybierasz branże, obszar działania oraz kryteria kwalifikacji."], ["02", "System wyszukuje firmy", "Zbiera pasujące firmy z wybranego obszaru i dostępnych źródeł."], ["03", "Kwalifikuje kontakty", "Pomija rekordy bez potrzebnych danych i stosuje wskazane wykluczenia."], ["04", "Przygotowuje wiadomość", "AI korzysta z opisu oferty, tonu marki i wskazanego wezwania do działania."], ["05", "Wiadomość trafia do kolejki", "Wysyłka odbywa się w oknie i limitach ustawionych dla kampanii."], ["06", "Zespół obsługuje odpowiedzi", "Panel zbiera statusy wiadomości i odpowiedzi, aby łatwiej zaplanować kolejny krok."]],
     },
     benefits: {
       eyebrow: "Korzyści",
-      title: "System pracuje za Ciebie, Ty rozmawiasz z zainteresowanymi",
-      items: [["Codzienny dopływ leadów", "Bot pracuje każdego dnia roboczego. Nie musisz pamiętać o prospectingu, rano kolejka już czeka."], ["Zero śmieciowych kontaktów", "Firmy bez maila i poza targetem są odrzucane, zanim zobaczysz je w panelu."], ["Wiadomości w Twoim stylu", "AI pisze na bazie Twojego opisu oferty, tonu i przykładowego maila. Bez szablonowego spamu."], ["Panel zamiast chaosu", "Wysłane, dostarczone, otwarte, odpowiedzi i follow-upy w jednym czytelnym widoku."]],
+      title: "Mniej ręcznej pracy przy prospectingu, więcej kontroli nad kampanią",
+      items: [["Powtarzalny proces", "Ustawiasz kryteria i harmonogram. System wspiera regularną pracę nad nowymi kontaktami."], ["Lepsza jakość listy", "Kwalifikacja i wykluczenia pomagają ograniczyć kontakty poza ustalonym targetem."], ["Treść oparta na Twojej ofercie", "AI przygotowuje szkic na podstawie briefu, tonu marki i przykładowej wiadomości."], ["Jeden panel do pracy", "Kontakty, statusy wiadomości, odpowiedzi i follow-upy są zebrane w jednym miejscu."]],
     },
     safety: {
       eyebrow: "Bezpieczna wysyłka",
-      title: "Dostarczalność ważniejsza niż tempo",
-      body: "Bot działa w oknie ustawionym w kampanii i realizuje wysyłkę przez kolejkę. Każdy cykl szuka jednego leada, a limity dzienne wynikają z ręcznie wpisanego schedule warm-upu.",
-      points: [["Warm-up kampanii", "Admin ustawia własne progi dzienne, np. 5 → 10 → 25 → 50 albo 25 → 50. Po ostatnim progu bot trzyma ostatnią wartość."], ["Wysyłka w godzinach pracy", "Kolejka działa w oknie ustawionym w kampanii. Limit i odstępy wynikają z ręcznego schedule warm-upu."], ["Lista wypisów i suppression", "Jedno kliknięcie „wypisz mnie” trwale blokuje adres. Bot nigdy nie napisze drugi raz."], ["Follow-up z umiarem", "Maksymalnie kilka delikatnych przypomnień, z odstępem, który sam ustalasz."]],
+      title: "Kontrolowane tempo i jasne zasady kontaktu",
+      body: "Wiadomości przechodzą przez kolejkę i są wysyłane w zaplanowanym oknie. Limity oraz odstępy dopasowuje się do pakietu, skrzynki i konfiguracji kampanii.",
+      points: [["Stopniowe zwiększanie limitu", "Warm-up może zwiększać dzienny limit etapami. Harmonogram i wartość docelową ustala się przed aktywacją kampanii."], ["Wysyłka w zaplanowanych godzinach", "Kolejka respektuje okno pracy, odstępy między wiadomościami i limit kampanii."], ["Obsługa rezygnacji", "Prośby o zaprzestanie kontaktu trafiają na listę blokad i są pomijane w kolejnych kampaniach."], ["Follow-up tylko według ustawień", "Przypomnienia są planowane z określonym odstępem. System sprawdza dostępne sygnały odpowiedzi przed dalszym kontaktem."]],
       schedule: ["Start", "+2h", "+4h", "+6h", "+8h", "Koniec"],
       scheduleStart: "start",
       scheduleEnd: "koniec",
@@ -67,88 +82,103 @@ const copy = {
     },
     panel: {
       eyebrow: "Panel klienta",
-      title: "Widzisz tylko wyniki, nie techniczną kolejkę",
-      body: "Panel pokazuje realnie wysłane leady i wiadomości, a nie szkice ani firmy bez adresu email. Logujesz się i od razu wiesz, co bot dziś dla Ciebie zrobił.",
+      title: "Widzisz przebieg kampanii i wiesz, co wymaga reakcji",
+      body: "Panel klienta porządkuje leady, statusy wiadomości, odpowiedzi i follow-upy. Status „przyjęta przez SMTP” oznacza akceptację przez serwer pocztowy, nie gwarantuje wyświetlenia w skrzynce odbiorczej.",
       login: "Zaloguj się do panelu",
       stats: ["Wysłane", "Dostarczone", "Otwarte", "Odpowiedzi", "Follow-upy", "Leady"],
     },
     plans: {
       eyebrow: "Pakiety",
-      title: "Wybierz rytm pracy swojego SalesBota",
-      body: "Ceny netto, płatność Stripe, aktywacja po ręcznej weryfikacji przez FluxBase.",
-      recommended: "Najczęstszy wybór",
+      title: "Wybierz pakiet dla swojego SalesBota",
+      body: "Każdy pakiet pokazuje limit i koszt netto oraz brutto. Wersja próbna jest płatnością jednorazową; pozostałe pakiety odnawiają się co miesiąc. Uruchomienie następuje po sprawdzeniu konfiguracji.",
+      recommended: "Polecany pakiet",
       choose: "Wybierz plan",
     },
     faq: {
       eyebrow: "FAQ",
       title: "Najczęstsze pytania",
-      items: [["Czy firmy bez maila trafiają do panelu?", "Nie. Bot pomija je przed zapisem, żeby panel klienta pokazywał tylko realne leady gotowe do kontaktu."], ["Czy bot wysyła wszystkie maile naraz?", "Nie. Każdy cykl kampanii szuka maksymalnie jednego leada i dodaje jedną wiadomość do kolejki, a worker wysyła stopniowo."], ["Czy mogę wybrać kraje Europy?", "Tak. Możesz działać w Polsce, całej Europie, wybranych krajach, województwach albo własnej liście miast."], ["Czy bot pisze maile moim stylem?", "Tak. W formularzu dodajesz opis oferty, przykładowy mail, ton komunikacji, CTA i rzeczy, których bot ma unikać."], ["Czy mogę dodać załączniki?", "Tak. Załączniki kampanii są dołączane do wiadomości wysyłanych w tej kampanii."], ["Jak działa warm-up?", "Nowa skrzynka zaczyna od 5 maili dziennie, potem rośnie codziennie o 5: 10, 15, 20, aż do docelowego limitu kampanii, np. 50."], ["Czy wysłane oznacza dostarczone?", "W BotSeller przyjęcie wiadomości przez SMTP liczymy w panelu jako dostarczone."]],
+      items: [["Czy firmy bez maila trafiają do panelu?", "Nie. System pomija rekordy bez adresu e-mail, który jest potrzebny do kontaktu."], ["Czy bot wysyła wszystkie maile naraz?", "Nie. Wiadomości przechodzą przez kolejkę i są wysyłane zgodnie z harmonogramem oraz limitami kampanii."], ["Czy mogę wybrać kraje Europy?", "Obecne pakiety w formularzu obejmują Polskę: całą Polskę albo wybrane województwa. Szerszy zasięg wymaga indywidualnego ustalenia."], ["Czy bot pisze maile moim stylem?", "AI przygotowuje treść na podstawie opisu oferty, tonu komunikacji, przykładowej wiadomości i wskazówek przekazanych w formularzu."], ["Czy mogę dodać załączniki?", "Tak. Do briefu możesz dodać do pięciu plików. Po aktywacji można je podpiąć do wiadomości kampanii."], ["Jak działa warm-up?", "Limit może rosnąć etapami, np. od 5 wiadomości dziennie. Wartość docelowa i harmonogram są ustalane dla kampanii."], ["Czy status wysłania oznacza, że wiadomość jest w skrzynce odbiorczej?", "Nie. Status przyjęcia przez SMTP potwierdza, że serwer pocztowy przyjął wiadomość do dalszej obsługi. Nie potwierdza jej umieszczenia w głównej skrzynce ani przeczytania."], ["Czy po płatności SalesBot uruchamia się od razu?", "Nie. FluxBase sprawdza brief i konfigurację, a następnie ręcznie aktywuje konto oraz kampanię."], ["Czy mogę sprzedawać pakiety SalesBota swoim klientom?", "Taką współpracę omawiamy jako osobne wdrożenie całej platformy FluxBase BotSeller. Zakres, dostęp do strony, paneli, płatności i infrastruktury ustalamy indywidualnie."]],
     },
     final: {
       eyebrow: "Gotowy na start?",
-      title: "Skonfiguruj swojego SalesBota jeszcze dziś",
-      body: "Formularz zajmuje około 10 minut. Płatność Stripe, ręczna weryfikacja i start kampanii pod okiem FluxBase.",
+      title: "Zaplanuj start swojego SalesBota",
+      body: "Przygotuj informacje o ofercie, odbiorcach i skrzynce do odpowiedzi. Po płatności FluxBase sprawdzi konfigurację i skontaktuje się w sprawie aktywacji.",
       cta: "Załóż SalesBota",
     },
     features: (plan: (typeof BOTSELLER_PLANS)[number]) => [
-      `${plan.dailyEmails} maili dziennie`,
-      plan.billingMode === "payment" ? `${plan.totalEmails || 100} maili łącznie przez ${plan.durationDays || 5} dni` : "Abonament miesięczny netto",
-      "Wiadomości AI w stylu Twojej marki",
-      "Warm-up, kolejka i follow-upy",
-      "Panel klienta ze statystykami",
+      `Do ${plan.dailyEmails} wiadomości dziennie po warm-upie`,
+      plan.billingMode === "payment" ? `${plan.totalEmails || 100} wiadomości w ${plan.durationDays || 5}-dniowym teście` : `Do ${plan.monthlyEmails.toLocaleString("pl-PL", { useGrouping: "always" })} wiadomości w miesiącu`,
+      "Skrzynka wysyłkowa konfigurowana przez FluxBase",
+      "Wiadomości przygotowane na podstawie Twojego briefu",
+      "Kolejka wysyłki i panel klienta",
     ],
   },
   en: {
-    nav: ["How it works", "Benefits", "Plans", "Safety", "FAQ"],
+    nav: ["How it works", "Deployment options", "Benefits", "Plans", "Safe sending", "FAQ"],
     login: "Log in",
     signup: "Start SalesBot",
     heroPill: "FluxBase BotSeller · AI Sales Bot",
-    heroTitle: <>Your AI salesperson that <em>daily</em> finds clients and writes first</>,
+    heroTitle: <>B2B prospecting that <em>organizes</em> your sales workflow</>,
     heroSub:
-      "SalesBot searches for matched companies every day, filters out contacts without email, writes messages in your brand voice and sends them gradually to protect your mailbox.",
-    heroCta: "Start SalesBot in 10 minutes",
+      "FluxBase BotSeller helps find and qualify companies, prepare first messages based on your offer, and send them according to campaign settings. Your team manages replies in one panel.",
+    heroCta: "View plans",
     heroSecondary: "See how it works",
-    heroPoints: ["No junk leads", "Gradual sending and warm-up", "Client panel 24/7"],
+    heroPoints: ["Company search and qualification", "Messages based on your offer", "Sending and reply tracking"],
     mockup: {
-      top: "Client panel · BotSeller",
-      metrics: [["Sent today", "27", "+9 vs yesterday"], ["Delivered", "98.2%", "stable"], ["Replies", "6", "+2 new"]],
-      chart: "Sending this week",
-      days: "last 7 days",
-      queue: [["Nowak Furniture Studio", "Message delivered", "delivered"], ["LexPartner Law Office", "Lead replied", "replied"], ["Ad Studio 360", "Scheduled 11:24", "queued"]],
-      floatA: ["AI writes a message", "“Hello, I saw your studio website…”"],
-      floatB: ["New reply", "“Please send pricing and offer details.”"],
+      top: "Demo view · sample data",
+      metrics: [["In queue", "8", "sample data"], ["Mailbox status", "Active", "sample data"], ["Replies", "6", "sample data"]],
+      chart: "Campaign activity",
+      days: "sample week",
+      queue: [["Nowak Furniture Studio", "Accepted by SMTP server", "delivered"], ["LexPartner Law Office", "Company reply", "replied"], ["Ad Studio 360", "Sending scheduled", "queued"]],
+      floatA: ["Message ready to review", "“Hello, we build websites for…”"],
+      floatB: ["Reply in the panel", "“Please send pricing and offer details.”"],
     },
-    audienceIntro: "Works best where regular first contact matters:",
+    audienceIntro: "For teams that want a more organized B2B prospecting process:",
     audience: ["Agencies", "Service companies", "Software houses", "Local businesses", "B2B", "Logistics and production"],
-    seo: {
-      eyebrow: "SEO / AI Sales Bot",
-      title: "Email automation, cold mailing and B2B leads in one system",
-      body: "FluxBase BotSeller is built for companies looking for email automation, email sending bots, AI Sales Bots, cold mailing, B2B prospecting, lead generation and follow-ups.",
-      topics: [
-        ["Sales email automation", "FluxBase BotSeller helps companies regularly send first messages to new B2B clients without manually copying addresses, writing every email from scratch or tracking follow-ups."],
-        ["B2B lead generation", "The system searches companies by industry, location, country, region, business type and qualification rules, so campaigns target specific companies instead of random contacts."],
-        ["AI cold mailing", "AI prepares messages in the brand voice with the offer description, sales arguments and selected CTA. It is made for cold mailing, prospecting and sales automation."],
-        ["Safe sending with Gmail SMTP", "BotSeller sends gradually, uses warm-up and works through the client’s SMTP account, so automatic sending does not look like a one-shot spam cannon."],
-      ],
-      phrasesLabel: "Main search phrases",
+    deployment: {
+      eyebrow: "Deployment options",
+      title: "Choose what your business needs",
+      body: "Use SalesBot in your own business or discuss taking over the full FluxBase BotSeller platform and selling plans yourself.",
+      panelLabel: "For your own team",
+      panelTitle: "SalesBot client panel",
+      panelBody: "Choose a plan and share your brief. FluxBase configures the mailbox and prepares the account for your campaigns.",
+      panelPoints: ["Client panel for leads and campaigns", "Plan matched to your sending limit", "Activation after configuration review"],
+      panelCta: "View SalesBot plans",
+      platformLabel: "For a partner or operator",
+      platformTitle: "Full FluxBase BotSeller platform",
+      platformBody: "For a person or company that wants to take over the complete product and sell SalesBot plans under the FluxBase BotSeller brand.",
+      platformPoints: ["Homepage and order form", "Stripe, client panel and admin panel", "Supabase and deployment setup to be agreed"],
+      platformCta: "Ask about a full deployment",
+      note: "A full deployment is scoped individually, including handover, domain, payment accounts, hosting, database and ongoing operations.",
     },
-    phrases: ["email automation", "automatic email sending", "automatic emails to clients", "email sending bot", "AI sales bot", "B2B lead generation", "lead generation Poland", "cold mailing tool", "B2B prospecting", "follow-up automation", "email campaign system", "FluxBase BotSeller"],
+    seo: {
+      eyebrow: "FluxBase BotSeller",
+      title: "From finding companies to managing replies — in one panel",
+      body: "BotSeller brings together company search, contact qualification, message preparation and campaign management. You set the offer, audience and communication rules; the system runs the configured workflow.",
+      topics: [
+        ["Search by criteria", "Choose industries, locations and exclusions. SalesBot gathers matching companies and skips records without the contact details the campaign needs."],
+        ["Messages based on your offer", "Share your service description, communication tone and a sample message. AI-prepared content can be reviewed and refined before launch."],
+        ["Sending on a schedule", "Messages enter a queue and send within your campaign window and limits. Warm-up can increase sending volume gradually, but does not guarantee inbox placement."],
+        ["Campaign management in one place", "The client panel shows contacts, message statuses, replies and planned follow-ups."],
+      ],
+    },
+    phrases: ["B2B sales automation", "B2B email automation", "B2B lead generation", "B2B prospecting", "AI Sales Bot", "cold mailing", "sales follow-ups", "FluxBase BotSeller"],
     workflow: {
       eyebrow: "How it works",
-      title: "From target to reply, without manual chaos",
-      body: "You set the direction once. The bot repeats the whole process every business day.",
-      steps: [["01", "Choose the target", "Industries, countries, cities, company types and lead qualification rules."], ["02", "Bot finds companies", "It searches matched businesses in the selected area every day."], ["03", "Bot filters contacts", "Companies without email addresses do not enter your panel."], ["04", "AI writes the message", "The message is created in your brand tone, with your CTA."], ["05", "System sends gradually", "The queue spreads messages during working hours, email by email."], ["06", "You receive replies", "The panel shows sent, delivered, opened messages and reactions."]],
+      title: "From search criteria to a conversation with a prospect",
+      body: "You define the offer and audience. BotSeller organizes the campaign workflow, and your team takes over interested replies.",
+      steps: [["01", "Define your audience", "Choose industries, locations and qualification criteria."], ["02", "The system finds companies", "It gathers matching companies in your selected area and available sources."], ["03", "Contacts are qualified", "Records without required details are skipped and exclusions are applied."], ["04", "A message is prepared", "AI uses your offer description, brand tone and call to action."], ["05", "Messages enter a queue", "Sending follows the campaign window and limits you set."], ["06", "Your team handles replies", "The panel brings message statuses and replies together so you can plan the next step."]],
     },
     benefits: {
       eyebrow: "Benefits",
-      title: "The system works for you, you talk to interested leads",
-      items: [["Daily lead flow", "The bot works every business day. You do not need to remember prospecting, the queue is already waiting in the morning."], ["No junk contacts", "Companies without emails and outside your target are rejected before you see them in the panel."], ["Messages in your style", "AI writes based on your offer, tone and sample email. No generic spam templates."], ["Panel instead of chaos", "Sent, delivered, opened, replies and follow-ups in one clear view."]],
+      title: "Less manual prospecting, more control over campaigns",
+      items: [["A repeatable process", "Set criteria and a schedule. The system supports regular work on new prospects."], ["A more relevant list", "Qualification and exclusions help limit contacts outside your chosen audience."], ["Content based on your offer", "AI prepares a draft from your brief, brand tone and sample message."], ["One place to work", "Contacts, message statuses, replies and follow-ups are gathered in one panel."]],
     },
     safety: {
       eyebrow: "Safe sending",
-      title: "Deliverability matters more than speed",
-      body: "The bot works inside the campaign window and sends through a queue. Each cycle searches one lead, while daily limits come from the manually entered warm-up schedule.",
-      points: [["Campaign warm-up", "Admin sets daily thresholds, e.g. 5 → 10 → 25 → 50 or 25 → 50. After the final threshold, the bot keeps the last value."], ["Sending during working hours", "The queue works inside the campaign window. Limits and spacing come from the manual warm-up schedule."], ["Unsubscribe and suppression list", "One click on “unsubscribe” permanently blocks an address. The bot never writes again."], ["Careful follow-ups", "Only a few gentle reminders, spaced by the delay you set." ]],
+      title: "Controlled sending and clear contact rules",
+      body: "Messages move through a queue and send in a scheduled window. Limits and spacing are set for the plan, mailbox and campaign configuration.",
+      points: [["Gradual limit increases", "Warm-up can increase the daily limit in stages. The schedule and target are set before a campaign is activated."], ["Sending in scheduled hours", "The queue respects the campaign window, spacing between messages and sending limit."], ["Unsubscribe handling", "Requests to stop contact are added to a suppression list and skipped in future campaigns."], ["Follow-ups follow your settings", "Reminders are scheduled at the interval you choose. Available reply signals are checked before further contact."]],
       schedule: ["Start", "+2h", "+4h", "+6h", "+8h", "End"],
       scheduleStart: "start",
       scheduleEnd: "end",
@@ -156,38 +186,52 @@ const copy = {
     },
     panel: {
       eyebrow: "Client panel",
-      title: "You see results, not the technical queue",
-      body: "The panel shows real sent leads and messages, not drafts or companies without email addresses. You log in and instantly know what the bot did today.",
+      title: "See campaign activity and what needs your attention",
+      body: "The client panel organizes leads, message statuses, replies and follow-ups. “Accepted by SMTP” means the mail server accepted the message for processing; it does not guarantee inbox placement.",
       login: "Log in to panel",
       stats: ["Sent", "Delivered", "Opened", "Replies", "Follow-ups", "Leads"],
     },
     plans: {
       eyebrow: "Plans",
-      title: "Choose the rhythm of your SalesBot",
-      body: "Net prices, Stripe payment, activation after manual FluxBase verification.",
-      recommended: "Most popular",
+      title: "Choose a plan for your SalesBot",
+      body: "Each plan shows its net and gross price. The trial is a one-time payment; other plans renew monthly. Service activation follows a configuration review.",
+      recommended: "Recommended plan",
       choose: "Choose plan",
     },
     faq: {
       eyebrow: "FAQ",
       title: "Common questions",
-      items: [["Do companies without email enter the panel?", "No. The bot skips them before saving, so the client panel shows only real leads ready for contact."], ["Does the bot send all emails at once?", "No. Each campaign cycle finds at most one lead and adds one message to the queue, then the worker sends gradually."], ["Can I choose European countries?", "Yes. You can operate in Poland, across Europe, selected countries, regions or your own city list."], ["Does the bot write in my style?", "Yes. In the form you add your offer description, sample email, tone, CTA and things the bot should avoid."], ["Can I add attachments?", "Yes. Campaign attachments are included in messages sent in that campaign."], ["How does warm-up work?", "A new mailbox starts from 5 emails per day, then grows daily by 5: 10, 15, 20, up to the target campaign limit, e.g. 50."], ["Does sent mean delivered?", "In BotSeller, SMTP acceptance is counted in the panel as delivered." ]],
+      items: [["Do companies without email enter the panel?", "No. The system skips records without an email address needed for contact."], ["Does the bot send all emails at once?", "No. Messages move through a queue and send according to the campaign schedule and limits."], ["Can I choose European countries?", "Current plans in the form cover Poland: all of Poland or selected regions. Wider coverage needs to be agreed separately."], ["Does the bot write in my style?", "AI prepares content based on your offer, communication tone, sample message and instructions from the form."], ["Can I add attachments?", "Yes. You can attach up to five files to your brief. After activation they can be added to campaign messages."], ["How does warm-up work?", "The limit can increase in stages, for example starting at 5 messages a day. The schedule and target limit are set for the campaign."], ["Does a sent status mean the message is in the inbox?", "No. SMTP acceptance confirms that the mail server accepted the message for processing. It does not confirm inbox placement or that the message was read."], ["Does SalesBot start immediately after payment?", "No. FluxBase reviews the brief and configuration, then activates the account and campaign manually."], ["Can I sell SalesBot plans to my own clients?", "We discuss this as a separate deployment of the full FluxBase BotSeller platform. The scope for the public site, panels, payments and infrastructure is agreed individually."]],
     },
     final: {
       eyebrow: "Ready to start?",
-      title: "Configure your SalesBot today",
-      body: "The form takes about 10 minutes. Stripe payment, manual verification and campaign launch under FluxBase supervision.",
+      title: "Plan your SalesBot launch",
+      body: "Prepare details about your offer, audience and reply mailbox. After payment, FluxBase will review the configuration and contact you about activation.",
       cta: "Start SalesBot",
     },
     features: (plan: (typeof BOTSELLER_PLANS)[number]) => [
-      `${plan.dailyEmails} emails per day`,
-      plan.billingMode === "payment" ? `${plan.totalEmails || 100} emails total over ${plan.durationDays || 5} days` : "Net monthly subscription",
-      "AI messages in your brand voice",
-      "Warm-up, queue and follow-ups",
-      "Client panel with statistics",
+      `Up to ${plan.dailyEmails} messages a day after warm-up`,
+      plan.billingMode === "payment" ? `${plan.totalEmails || 100} messages during the ${plan.durationDays || 5}-day trial` : `Up to ${plan.monthlyEmails.toLocaleString("en-GB", { useGrouping: "always" })} messages per month`,
+      "Sending mailbox configured by FluxBase",
+      "Messages prepared from your brief",
+      "Sending queue and client panel",
     ],
   },
 } satisfies Record<Language, Record<string, unknown>>;
+
+function formatLocalizedPlanPrice(plan: (typeof BOTSELLER_PLANS)[number], language: Language) {
+  const amount = new Intl.NumberFormat(language === "pl" ? "pl-PL" : "en-GB", {
+    style: "currency",
+    currency: "PLN",
+    maximumFractionDigits: 0,
+    useGrouping: "always",
+  }).format(plan.pricePln);
+  const period = plan.billingMode === "payment"
+    ? language === "pl" ? `za ${plan.durationDays || 5} dni` : `for ${plan.durationDays || 5} days`
+    : language === "pl" ? "/ miesiąc" : "/ month";
+  const net = language === "pl" ? "netto" : "net";
+  return `${amount} ${net} ${period}`;
+}
 
 export default function LandingPage() {
   const { language } = useLanguage();
@@ -213,7 +257,7 @@ export default function LandingPage() {
       offers: BOTSELLER_PLANS.map((plan) => ({
         "@type": "Offer",
         name: plan.name,
-        price: plan.pricePln,
+        price: grossAmountGrosze(plan.pricePln) / 100,
         priceCurrency: "PLN",
         availability: "https://schema.org/InStock",
         url: "https://www.fluxbase.pl/botseller",
@@ -240,10 +284,11 @@ export default function LandingPage() {
         </Link>
         <nav>
           <a href="#jak-dziala">{t.nav[0]}</a>
-          <a href="#korzysci">{t.nav[1]}</a>
-          <a href="#pakiety">{t.nav[2]}</a>
-          <a href="#bezpieczenstwo">{t.nav[3]}</a>
-          <a href="#faq">{t.nav[4]}</a>
+          <a href="#wdrozenia">{t.nav[1]}</a>
+          <a href="#korzysci">{t.nav[2]}</a>
+          <a href="#pakiety">{t.nav[3]}</a>
+          <a href="#bezpieczenstwo">{t.nav[4]}</a>
+          <a href="#faq">{t.nav[5]}</a>
           <Link className="nav-login" href="/client/login">{t.login}</Link>
           <Link className="nav-cta" href="/botseller">{t.signup}</Link>
           <LanguageSwitcher />
@@ -256,7 +301,7 @@ export default function LandingPage() {
           <h1>{t.heroTitle}</h1>
           <p className="lp-hero-sub">{t.heroSub}</p>
           <div className="hero-actions">
-            <Link className="primary-link lp-cta" href="/botseller">{t.heroCta}</Link>
+            <Link className="primary-link lp-cta" href="#pakiety">{t.heroCta}</Link>
             <a className="secondary-link" href="#jak-dziala">{t.heroSecondary}</a>
           </div>
           <div className="hero-points">
@@ -292,10 +337,34 @@ export default function LandingPage() {
 
       <section className="lp-audience-band"><span>{t.audienceIntro}</span><div>{t.audience.map((item) => <b key={item}>{item}</b>)}</div></section>
 
+      <section className="deployment-section" id="wdrozenia">
+        <div className="section-heading left">
+          <span className="eyebrow">{t.deployment.eyebrow}</span>
+          <h2>{t.deployment.title}</h2>
+          <p>{t.deployment.body}</p>
+        </div>
+        <div className="deployment-grid">
+          <article className="deployment-card">
+            <span className="deployment-label">{t.deployment.panelLabel}</span>
+            <h3>{t.deployment.panelTitle}</h3>
+            <p>{t.deployment.panelBody}</p>
+            <ul>{t.deployment.panelPoints.map((point) => <li key={point}>{point}</li>)}</ul>
+            <Link className="lp-plan-cta" href="/botseller">{t.deployment.panelCta}</Link>
+          </article>
+          <article className="deployment-card deployment-card-featured">
+            <span className="deployment-label">{t.deployment.platformLabel}</span>
+            <h3>{t.deployment.platformTitle}</h3>
+            <p>{t.deployment.platformBody}</p>
+            <ul>{t.deployment.platformPoints.map((point) => <li key={point}>{point}</li>)}</ul>
+            <a className="lp-plan-cta featured" href="mailto:office@fluxbase.pl?subject=FluxBase%20BotSeller%20-%20pelne%20wdrozenie">{t.deployment.platformCta}</a>
+          </article>
+        </div>
+        <p className="deployment-note">{t.deployment.note}</p>
+      </section>
+
       <section className="seo-section" aria-labelledby="seo-title">
         <div className="section-heading left"><span className="eyebrow">{t.seo.eyebrow}</span><h2 id="seo-title">{t.seo.title}</h2><p>{t.seo.body}</p></div>
         <div className="seo-grid">{t.seo.topics.map(([title, body]) => <article key={title}><h3>{title}</h3><p>{body}</p></article>)}</div>
-        <div className="seo-phrases" aria-label={t.seo.phrasesLabel}>{t.phrases.map((phrase) => <span key={phrase}>{phrase}</span>)}</div>
       </section>
 
       <section className="soft-section" id="jak-dziala">
@@ -321,7 +390,7 @@ export default function LandingPage() {
       <section className="plans-section plans-section-v2" id="pakiety">
         <div className="section-heading"><span className="eyebrow">{t.plans.eyebrow}</span><h2>{t.plans.title}</h2><p>{t.plans.body}</p></div>
         <div className="plans-grid plans-grid-v2">
-          {BOTSELLER_PLANS.map((plan) => <article className={plan.recommended ? "plan-card featured" : "plan-card"} key={plan.id}>{plan.recommended ? <span className="pill">{t.plans.recommended}</span> : null}<h3>{plan.name.replace("BotSeller ", "")}</h3><div className="lp-plan-price"><strong>{formatPlanPrice(plan)}</strong></div><ul className="lp-plan-features">{t.features(plan).map((feature) => <li key={feature}>{feature}</li>)}</ul><Link className={plan.recommended ? "lp-plan-cta featured" : "lp-plan-cta"} href="/botseller">{t.plans.choose}</Link></article>)}
+          {BOTSELLER_PLANS.map((plan) => <article className={plan.recommended ? "plan-card featured" : "plan-card"} key={plan.id}>{plan.recommended ? <span className="pill">{t.plans.recommended}</span> : null}<h3>{plan.name.replace("BotSeller ", "")}</h3><div className="lp-plan-price"><strong>{formatLocalizedPlanPrice(plan, language)}</strong><small>{language === "pl" ? `Kwota brutto: ${formatGrossPriceFromNet(plan.pricePln, "pl-PL")}` : `Gross total: ${formatGrossPriceFromNet(plan.pricePln, "en-GB")}`}</small></div><ul className="lp-plan-features">{t.features(plan).map((feature) => <li key={feature}>{feature}</li>)}</ul><Link className={plan.recommended ? "lp-plan-cta featured" : "lp-plan-cta"} href="/botseller">{t.plans.choose}</Link></article>)}
         </div>
       </section>
 

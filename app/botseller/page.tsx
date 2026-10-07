@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import BotSellerLogo from "@/components/brand/BotSellerLogo";
 import MarketingFooter from "@/components/public/MarketingFooter";
-import { ADDITIONAL_MAILBOX_DAILY_EMAILS, ADDITIONAL_MAILBOX_PRICE_PLN, BOTSELLER_PLANS, formatPlanPrice } from "@/lib/pricing";
+import { ADDITIONAL_MAILBOX_DAILY_EMAILS, ADDITIONAL_MAILBOX_PRICE_PLN, BOTSELLER_PLANS, formatGrossPriceFromNet, formatPlanPrice } from "@/lib/pricing";
 import { EUROPE_COUNTRY_NAMES_FOR_EUROPE_PLAN, VOIVODESHIP_NAMES } from "@/lib/locationOptions";
 
 const initialForm = {
@@ -211,6 +211,9 @@ export default function BotSellerPage() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const plan = useMemo(() => BOTSELLER_PLANS.find((item) => item.id === form.plan_id) || BOTSELLER_PLANS[0], [form.plan_id]);
+  const requiresRecurringConsent = plan.billingMode === "subscription";
+  const additionalMailboxSelected = requiresRecurringConsent && form.additional_mailbox_requested;
+  const totalNetPln = plan.pricePln + (additionalMailboxSelected ? ADDITIONAL_MAILBOX_PRICE_PLN : 0);
 
   useEffect(() => {
     const savedDraftId = window.localStorage.getItem("botseller_signup_draft_id");
@@ -382,8 +385,10 @@ export default function BotSellerPage() {
       setNotice({ tone: "danger", message: attachmentError });
       return;
     }
-    if (!form.accepts_terms || !form.accepts_recurring_contract) {
-      setNotice({ tone: "danger", message: "Przed przejściem do płatności zaakceptuj regulamin oraz potwierdź zgodę na cykliczną umowę abonamentową." });
+    if (!form.accepts_terms || (requiresRecurringConsent && !form.accepts_recurring_contract)) {
+      setNotice({ tone: "danger", message: requiresRecurringConsent
+        ? "Przed przejściem do płatności zaakceptuj regulamin i potwierdź automatyczne odnowienie abonamentu."
+        : "Przed przejściem do płatności zaakceptuj regulamin." });
       return;
     }
     setSubmitting(true);
@@ -453,13 +458,23 @@ export default function BotSellerPage() {
             key={item.id}
             type="button"
             className={item.id === form.plan_id ? "pricing-card active" : "pricing-card"}
-            onClick={() => setForm({ ...form, plan_id: item.id, ...locationStateForPlan(item.scope, item.scope === "europe" ? "europe" : "poland", item.scope === "europe" ? "Cała Europa" : "Cała Polska") })}
+            onClick={() => setForm({
+              ...form,
+              plan_id: item.id,
+              accepts_terms: false,
+              accepts_recurring_contract: false,
+              additional_mailbox_requested: item.billingMode === "subscription" ? form.additional_mailbox_requested : false,
+              ...locationStateForPlan(item.scope, item.scope === "europe" ? "europe" : "poland", item.scope === "europe" ? "Cała Europa" : "Cała Polska"),
+            })}
           >
-            {item.recommended ? <span className="pill">Najczęstszy wybór</span> : null}
+            {item.recommended ? <span className="pill">Polecany pakiet</span> : null}
             <strong>{item.name}</strong>
-            <span>{item.dailyEmails} maili dziennie</span>
+            <span>Do {item.dailyEmails.toLocaleString("pl-PL")} wiadomości dziennie po warm-upie</span>
             <b>{formatPlanPrice(item)}</b>
-            <small>{item.billingMode === "payment" ? `${item.totalEmails || 100} maili łącznie · ${item.durationDays || 5} dni testu` : `${item.dailyEmails} maili dziennie · płatność Stripe`}</small>
+            <small>{item.billingMode === "payment"
+              ? `${item.totalEmails || 100} wiadomości w ${item.durationDays || 5}-dniowym teście · płatność jednorazowa`
+              : `Do ${item.monthlyEmails.toLocaleString("pl-PL", { useGrouping: "always" })} wiadomości w miesiącu · abonament odnawiany co miesiąc`}</small>
+            <small>Kwota brutto: {formatGrossPriceFromNet(item.pricePln)}</small>
             <em className="pricing-card-select" aria-hidden="true">
               {item.id === form.plan_id ? "✓ Wybrany pakiet" : "Wybierz pakiet"}
             </em>
@@ -469,9 +484,9 @@ export default function BotSellerPage() {
 
       <section className="public-summary">
         <div><span>Wybrany pakiet</span><strong>{plan.name}</strong></div>
-        <div><span>Limit</span><strong>{plan.dailyEmails}/dzień</strong></div>
-        <div><span>Cena</span><strong>{formatPlanPrice(plan)}</strong></div>
-        <div><span>Aktywacja</span><strong>Ręcznie po kontroli</strong></div>
+        <div><span>Limit dzienny</span><strong>Do {plan.dailyEmails.toLocaleString("pl-PL")} wiadomości po warm-upie</strong></div>
+        <div><span>Cena</span><strong>{formatPlanPrice(plan)}</strong><small>Kwota brutto: {formatGrossPriceFromNet(plan.pricePln)}</small></div>
+        <div><span>Uruchomienie</span><strong>Po sprawdzeniu konfiguracji przez FluxBase</strong></div>
       </section>
 
       <form className="public-form slim-form" onSubmit={submit}>
@@ -503,9 +518,9 @@ export default function BotSellerPage() {
           <section className="form-section">
             <h2>Pakiet</h2>
             <p className="form-section-lead">
-              Wybrany pakiet: <strong>{plan.name}</strong> — {plan.dailyEmails} maili dziennie za {formatPlanPrice(plan)}. Możesz zmienić wybór, klikając kartę powyżej.
+              Wybrany pakiet: <strong>{plan.name}</strong> — do {plan.dailyEmails.toLocaleString("pl-PL", { useGrouping: "always" })} wiadomości dziennie po warm-upie. Limit miesięczny: {plan.monthlyEmails.toLocaleString("pl-PL", { useGrouping: "always" })} wiadomości. Możesz zmienić wybór, klikając kartę powyżej.
             </p>
-            <p className="public-mini-note">Limity i szczegóły kampanii będzie można dopracować w panelu admina przed aktywacją. Płatność obsługuje Stripe. Pakiety abonamentowe można anulować z panelu klienta.</p>
+            <p className="public-mini-note">Przed płatnością zobaczysz kwotę netto i brutto. Wersja próbna jest płatnością jednorazową; pakiety Starter, Growth i Pro są abonamentami odnawianymi co miesiąc. FluxBase sprawdza konfigurację przed aktywacją. Abonament można anulować w panelu klienta.</p>
           </section>
         ) : null}
 
@@ -532,7 +547,7 @@ export default function BotSellerPage() {
               <Field label="Czym zajmuje się firma, która wysyła maila?" help="Najważniejszy opis Twojej firmy i oferty."><textarea value={form.company_description} onChange={(e) => setForm({ ...form, company_description: e.target.value })} required placeholder="Np. tworzymy strony internetowe dla lokalnych firm usługowych..." /></Field>
               <Field label="Jakich firm szukamy?" help="Branże po przecinku, najlepiej konkretnie."><input value={form.target_industries} onChange={(e) => setForm({ ...form, target_industries: e.target.value })} required placeholder="restauracje, kawiarnie, gabinety fizjoterapii" /></Field>
               <Field label="Docelowa grupa odbiorców / nisza" help="Zawęź target, aby bot nie szukał zbyt szeroko."><textarea value={form.target_audience_niche} onChange={(e) => setForm({ ...form, target_audience_niche: e.target.value })} placeholder="lokalne firmy bez nowoczesnej strony, właściciele restauracji premium, małe firmy budowlane" /></Field>
-              <Field label="Jaką usługę promujemy?"><textarea value={form.promoted_service} onChange={(e) => setForm({ ...form, promoted_service: e.target.value })} placeholder="Np. nowoczesna strona internetowa, automatyzacja obsługi leadów..." /></Field>
+              <Field label="Jaką usługę promujemy?"><textarea value={form.promoted_service} onChange={(e) => setForm({ ...form, promoted_service: e.target.value })} required placeholder="Np. nowoczesna strona internetowa, automatyzacja obsługi leadów..." /></Field>
               <Field label="Obszar działania">
                 <select
                   value={safeLocationScope}
@@ -596,10 +611,14 @@ export default function BotSellerPage() {
                   W formularzu klient podaje tylko adres, na który mają trafiać odpowiedzi od zainteresowanych firm.
                 </p>
               </div>
-              <label className="mode-option extra-mailbox-option">
-                <input type="checkbox" checked={form.additional_mailbox_requested} onChange={(e) => updateForm({ ...form, additional_mailbox_requested: e.target.checked })} />
-                <span>Dodaj dodatkową skrzynkę wysyłkową +{ADDITIONAL_MAILBOX_DAILY_EMAILS} maili dziennie za {ADDITIONAL_MAILBOX_PRICE_PLN} zł netto/mies. Odpowiedzi nadal będą trafiać na jeden główny email.</span>
-              </label>
+              {requiresRecurringConsent ? (
+                <label className="mode-option extra-mailbox-option">
+                  <input type="checkbox" checked={form.additional_mailbox_requested} onChange={(e) => updateForm({ ...form, additional_mailbox_requested: e.target.checked, accepts_recurring_contract: false })} />
+                  <span>Dodaj dodatkową skrzynkę wysyłkową: +{ADDITIONAL_MAILBOX_DAILY_EMAILS.toLocaleString("pl-PL", { useGrouping: "always" })} wiadomości dziennie za {ADDITIONAL_MAILBOX_PRICE_PLN.toLocaleString("pl-PL", { useGrouping: "always" })} zł netto miesięcznie ({formatGrossPriceFromNet(ADDITIONAL_MAILBOX_PRICE_PLN)} brutto). Odpowiedzi nadal będą trafiać na jeden główny adres.</span>
+                </label>
+              ) : (
+                <p className="public-mini-note">Dodatkowa skrzynka jest dostępna w pakietach abonamentowych. Wersja próbna obejmuje jedną skrzynkę.</p>
+              )}
             </div>
 
             <div className="public-smtp-test-card fluxbase-mailbox-card">
@@ -644,10 +663,10 @@ export default function BotSellerPage() {
             <h2>Podsumowanie</h2>
             <div className="public-summary">
               <div><span>Pakiet</span><strong>{plan.name}</strong></div>
-              <div><span>Cena</span><strong>{formatPlanPrice(plan)}</strong></div>
-              <div><span>Rozliczenie</span><strong>{plan.billingMode === "payment" ? "Płatność jednorazowa za 5 dni testu" : "Płatność cykliczna miesięczna, automatycznie odnawiana"}</strong></div>
-              <div><span>Dodatkowa skrzynka</span><strong>{form.additional_mailbox_requested ? `${ADDITIONAL_MAILBOX_PRICE_PLN} zł netto / miesiąc` : "Nie"}</strong></div>
-              <div><span>Łącznie</span><strong>{plan.billingMode === "payment" ? `${plan.pricePln} zł netto / ${plan.durationDays || 5} dni` : `${plan.pricePln + (form.additional_mailbox_requested ? ADDITIONAL_MAILBOX_PRICE_PLN : 0)} zł netto / miesiąc`}</strong></div>
+              <div><span>Cena pakietu</span><strong>{formatPlanPrice(plan)}</strong><small>Kwota brutto: {formatGrossPriceFromNet(plan.pricePln)}</small></div>
+              <div><span>Rozliczenie</span><strong>{plan.billingMode === "payment" ? `Płatność jednorazowa za ${plan.durationDays || 5} dni testu. Bez automatycznego odnowienia.` : "Abonament miesięczny odnawiany automatycznie do chwili anulowania."}</strong></div>
+              <div><span>Dodatkowa skrzynka</span><strong>{additionalMailboxSelected ? `${ADDITIONAL_MAILBOX_PRICE_PLN.toLocaleString("pl-PL", { useGrouping: "always" })} zł netto / miesiąc (${formatGrossPriceFromNet(ADDITIONAL_MAILBOX_PRICE_PLN)} brutto)` : "Nie"}</strong></div>
+              <div><span>Łącznie</span><strong>{formatPlanPrice({ ...plan, pricePln: totalNetPln })}</strong><small>Kwota brutto: {formatGrossPriceFromNet(totalNetPln)}</small></div>
               <div><span>Firma</span><strong>{form.company_name || "-"}</strong></div>
               <div><span>Target</span><strong>{form.target_industries || "-"}</strong></div>
               <div><span>Zasięg</span><strong>{selectedLocations(plan.scope, safeLocationScope, form.selected_locations) || "-"}</strong></div>
@@ -664,18 +683,22 @@ export default function BotSellerPage() {
                   onChange={(e) => setForm({ ...form, accepts_terms: e.target.checked })}
                   required
                 />
-                <span>Akceptuję <Link href="/regulamin" target="_blank">regulamin usługi FluxBase BotSeller</Link> oraz <Link href="/polityka-prywatnosci" target="_blank">politykę prywatności</Link>. Rozumiem zakres usługi, cenę, okres rozliczeniowy i zasady realizacji.</span>
+                <span>Akceptuję <Link href="/regulamin" target="_blank">regulamin usługi FluxBase BotSeller</Link> oraz <Link href="/polityka-prywatnosci" target="_blank">politykę prywatności</Link>. Rozumiem zakres usługi, kwotę netto i brutto oraz zasady realizacji.</span>
               </label>
-              <label className="public-check consent-check">
-                <input
-                  type="checkbox"
-                  checked={form.accepts_recurring_contract}
-                  onChange={(e) => setForm({ ...form, accepts_recurring_contract: e.target.checked })}
-                  required
-                />
-                <span>Potwierdzam, że płatność uruchamia umowę abonamentową, która odnawia się automatycznie przy każdej kolejnej płatności za wybrany pakiet, do czasu jej anulowania zgodnie z regulaminem.</span>
-              </label>
-              <p className="public-mini-note">Kliknięcie „Zamawiam z obowiązkiem zapłaty” oznacza złożenie zamówienia i zgodę na rozpoczęcie realizacji usługi po opłaceniu zamówienia oraz ręcznej aktywacji przez FluxBase.</p>
+              {requiresRecurringConsent ? (
+                <label className="public-check consent-check">
+                  <input
+                    type="checkbox"
+                    checked={form.accepts_recurring_contract}
+                    onChange={(e) => setForm({ ...form, accepts_recurring_contract: e.target.checked })}
+                    required
+                  />
+                  <span>Potwierdzam, że wybrany pakiet jest abonamentem w kwocie {formatPlanPrice({ ...plan, pricePln: totalNetPln })} ({formatGrossPriceFromNet(totalNetPln)} brutto) i będzie odnawiany automatycznie do chwili anulowania.</span>
+                </label>
+              ) : (
+                <p className="public-mini-note">Wybrana wersja próbna jest płatnością jednorazową: {formatPlanPrice(plan)} ({formatGrossPriceFromNet(plan.pricePln)} brutto). Nie odnawia się automatycznie.</p>
+              )}
+              <p className="public-mini-note">Kliknięcie „Zamawiam z obowiązkiem zapłaty” składa zamówienie. Realizacja rozpocznie się po opłaceniu i ręcznym sprawdzeniu konfiguracji przez FluxBase.</p>
             </div>
           </section>
         ) : null}

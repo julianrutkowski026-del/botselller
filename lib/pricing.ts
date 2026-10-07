@@ -11,8 +11,8 @@ export function grossAmountGrosze(netAmountPln: number) {
   return Math.round(netAmountPln * VAT_MULTIPLIER * 100);
 }
 
-export function formatGrossPriceFromNet(netAmountPln: number) {
-  return `${(grossAmountGrosze(netAmountPln) / 100).toFixed(2).replace(".", ",")} zł brutto`;
+export function formatGrossPriceFromNet(netAmountPln: number, locale = "pl-PL") {
+  return new Intl.NumberFormat(locale, { style: "currency", currency: "PLN", useGrouping: "always" }).format(grossAmountGrosze(netAmountPln) / 100);
 }
 
 export type BotSellerPlan = {
@@ -93,7 +93,14 @@ export function getPlan(planId: string) {
 }
 
 export function formatPlanPrice(plan: BotSellerPlan) {
+  const amount = new Intl.NumberFormat("pl-PL", {
+    style: "currency",
+    currency: "PLN",
+    maximumFractionDigits: 0,
+    useGrouping: "always",
+  }).format(plan.pricePln);
+
   return plan.billingMode === "payment"
-    ? `${plan.pricePln} zł netto / ${plan.durationDays || 5} dni`
-    : `${plan.pricePln} zł netto / mies.`;
+    ? `${amount} netto / ${plan.durationDays || 5} dni`
+    : `${amount} netto / mies.`;
 }

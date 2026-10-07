@@ -159,13 +159,18 @@ export async function POST(request: Request) {
     const { payload, files } = await requestPayloadAndFiles(request);
     const termsAccepted = accepted(payload?.accepts_terms);
     const recurringContractAccepted = accepted(payload?.accepts_recurring_contract);
-    if (!termsAccepted || !recurringContractAccepted) {
-      return jsonError("Przed płatnością wymagane jest zaakceptowanie regulaminu oraz potwierdzenie cyklicznej umowy abonamentowej.", 400);
-    }
     const validation = validateSignupOrderPayload(payload, { requireSmtpPass: true });
     if (!validation.ok) return jsonError(validation.errors.join(" "), 400);
 
     const { data } = validation;
+    const recurringConsentRequired = data.plan.billingMode === "subscription";
+    const recurringConsentRecorded = recurringConsentRequired && recurringContractAccepted;
+    if (!termsAccepted || (recurringConsentRequired && !recurringConsentRecorded)) {
+      return jsonError(recurringConsentRequired
+        ? "Przed płatnością zaakceptuj regulamin i potwierdź automatyczne odnawianie wybranego abonamentu."
+        : "Przed płatnością zaakceptuj regulamin.", 400);
+    }
+
     if (data.mailbox_setup_mode !== "fluxbase_setup") {
       await verifySmtpConnection({
         host: data.smtp_host,
@@ -184,9 +189,9 @@ export async function POST(request: Request) {
       ...signupOrderToInsertPayload(data, "pending_payment"),
       stripe_price_id: inlinePriceReference,
       accepts_terms: termsAccepted,
-      accepts_recurring_contract: recurringContractAccepted,
+      accepts_recurring_contract: recurringConsentRecorded,
       terms_accepted_at: consentAcceptedAt,
-      recurring_contract_accepted_at: consentAcceptedAt,
+      recurring_contract_accepted_at: recurringConsentRecorded ? consentAcceptedAt : null,
       consent_ip: headersList.get("x-forwarded-for")?.split(",")[0]?.trim() || headersList.get("x-real-ip") || null,
       consent_user_agent: headersList.get("user-agent") || null,
     };
@@ -245,7 +250,7 @@ export async function POST(request: Request) {
         additional_mailbox_requested: String(data.additional_mailbox_requested),
         total_daily_emails: String(data.total_daily_emails),
         accepts_terms: String(termsAccepted),
-        accepts_recurring_contract: String(recurringContractAccepted),
+        accepts_recurring_contract: String(recurringConsentRecorded),
         terms_accepted_at: consentAcceptedAt,
       },
     };

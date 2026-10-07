@@ -20,9 +20,9 @@ export default function TermsPage() {
       <p>Limity wysyłki, zasięg, liczba wiadomości i funkcje pakietu wynikają z wybranego planu widocznego w formularzu zamówienia oraz w podsumowaniu przed płatnością.</p>
 
       <h2>5. Płatności, subskrypcja i zawarcie umowy</h2>
-      <p>Płatności abonamentowe są obsługiwane przez Stripe zgodnie z wybranym pakietem. Cena, okres rozliczeniowy, zasięg pakietu oraz charakter cykliczny płatności są pokazywane w formularzu i w podsumowaniu przed przejściem do płatności.</p>
-      <p>Przejście do płatności jest możliwe dopiero po zaakceptowaniu wymaganych zgód. Zaznaczenie zgód oraz kliknięcie przycisku oznaczonego jako zamówienie z obowiązkiem zapłaty oznacza złożenie zamówienia, akceptację regulaminu, wybranego pakietu, ceny, zakresu usługi oraz warunków cyklicznego rozliczenia abonamentowego.</p>
-      <p>Opłacenie pierwszego okresu rozliczeniowego oznacza zawarcie umowy o świadczenie usługi FluxBase BotSeller. Umowa jest zawierana na czas trwania opłaconego okresu rozliczeniowego i przedłuża się automatycznie na każdy kolejny opłacony okres, chyba że klient anuluje subskrypcję przed kolejną płatnością zgodnie z zasadami anulowania.</p>
+      <p>Płatności za pakiety abonamentowe są obsługiwane przez Stripe. Wersja próbna jest płatnością jednorazową i nie odnawia się automatycznie. Cena netto i brutto, limit, okres rozliczeniowy oraz zasady odnowienia wybranego pakietu są pokazywane w formularzu i podsumowaniu przed płatnością.</p>
+      <p>Przejście do płatności jest możliwe dopiero po zaakceptowaniu regulaminu i polityki prywatności. Przy pakiecie abonamentowym klient dodatkowo potwierdza automatyczne odnowienie. Kliknięcie przycisku zamówienia z obowiązkiem zapłaty składa zamówienie na wybrany pakiet i cenę.</p>
+      <p>Opłacenie wersji próbnej oznacza zawarcie umowy na jednorazowy, wskazany w zamówieniu okres próbny. Opłacenie pakietu abonamentowego oznacza zawarcie umowy na czas opłaconego okresu rozliczeniowego. Abonament odnawia się automatycznie na kolejne okresy, chyba że klient anuluje go przed kolejną płatnością zgodnie z zasadami anulowania.</p>
       <p>Zmiana istotnych warunków subskrypcji, w szczególności ceny, zakresu pakietu lub zasad automatycznego rozliczenia, wymaga poinformowania klienta z wyprzedzeniem. Jeżeli wymaga tego prawo, dalsze korzystanie z usługi na zmienionych warunkach wymaga wyraźnej akceptacji klienta.</p>
 
       <h2>6. Aktywacja usługi</h2>
@@ -30,7 +30,7 @@ export default function TermsPage() {
       <p>Jeżeli uruchomienie usługi nie będzie możliwe z przyczyn leżących po stronie klienta, FluxBase kontaktuje się z klientem w celu uzupełnienia danych albo zmiany konfiguracji.</p>
 
       <h2>7. Zgody wymagane przed płatnością</h2>
-      <p>Przed przejściem do Stripe klient musi potwierdzić, że akceptuje regulamin i politykę prywatności, rozumie charakter abonamentowy płatności oraz zgadza się na automatyczne odnawianie umowy przy każdej kolejnej płatności za wybrany pakiet.</p>
+      <p>Przed przejściem do Stripe klient potwierdza akceptację regulaminu i polityki prywatności. Przy wyborze pakietu abonamentowego musi dodatkowo potwierdzić jego cykliczny charakter i automatyczne odnawianie. Wersja próbna jest płatnością jednorazową i nie wymaga zgody na odnowienie.</p>
       <p>Brak akceptacji wymaganych zgód uniemożliwia przejście do płatności i złożenie zamówienia.</p>
 
       <h2>8. Anulowanie subskrypcji</h2>

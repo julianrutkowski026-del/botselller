@@ -854,6 +854,7 @@ end $$;
 
 alter table client_accounts enable row level security;
 alter table campaigns enable row level security;
+alter table system_locks enable row level security;
 alter table leads enable row level security;
 alter table messages enable row level security;
 alter table campaign_attachments enable row level security;
@@ -863,9 +864,11 @@ alter table run_logs enable row level security;
 alter table suppression_list enable row level security;
 alter table audit_logs enable row level security;
 alter table signup_orders enable row level security;
+alter table client_sending_mailboxes enable row level security;
 alter table signup_order_attachments enable row level security;
 alter table send_queue enable row level security;
 alter table admin_notifications enable row level security;
+alter table email_events enable row level security;
 
 drop policy if exists "admin all client_accounts" on client_accounts;
 drop policy if exists "admin all campaigns" on campaigns;
@@ -936,6 +939,7 @@ alter table bots add column if not exists api_key_iv text;
 alter table bots add column if not exists api_key_auth_tag text;
 alter table bots add column if not exists api_key_last4 text;
 alter table bots add column if not exists has_api_key boolean not null default false;
+alter table bots enable row level security;
 
 comment on column bots.api_key_encrypted is 'Zaszyfrowany API key przypisany do konkretnego bota. Nigdy nie jest zwracany do panelu.';
 comment on column bots.api_key_last4 is 'Ostatnie 4 znaki API key do bezpiecznego rozpoznania w panelu.';
@@ -995,4 +999,3 @@ create index if not exists ai_usage_logs_model_idx on ai_usage_logs(model);
 
 alter table ai_usage_logs enable row level security;
 drop policy if exists "admin all ai_usage_logs" on ai_usage_logs;
-create policy "admin all ai_usage_logs" on ai_usage_logs for all using (true) with check (true);

@@ -4727,6 +4727,168 @@ td code,
   line-height: 1.6;
 }
 
+/* Clear paths for the two FluxBase BotSeller customer types. */
+.deployment-section {
+  padding: 76px 7vw 66px;
+  background: #fff;
+}
+
+.deployment-section .section-heading {
+  max-width: 760px;
+  margin-bottom: 30px;
+}
+
+.deployment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.deployment-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--landing-line, #dbe6ee);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 14px 36px rgba(35, 72, 104, 0.06);
+  padding: clamp(22px, 3vw, 32px);
+}
+
+.deployment-card-featured {
+  border-color: rgba(49, 87, 255, 0.28);
+  background: linear-gradient(155deg, #f6f8ff 0%, #fff 72%);
+}
+
+.deployment-label {
+  color: var(--landing-blue, #2367d1);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.deployment-card h3 {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 28px);
+  line-height: 1.16;
+}
+
+.deployment-card p,
+.deployment-note {
+  margin: 0;
+  color: var(--landing-muted, #5d6b7c);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.deployment-card ul {
+  display: grid;
+  gap: 9px;
+  margin: 4px 0 8px;
+  padding-left: 20px;
+  color: #314154;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.deployment-card .lp-plan-cta {
+  width: 100%;
+  margin-top: auto;
+  padding: 10px 16px;
+  text-align: center;
+}
+
+.deployment-note {
+  max-width: 1080px;
+  margin: 18px auto 0;
+  font-size: 13px;
+}
+
+.lp-plan-price {
+  display: grid;
+  align-items: start;
+  gap: 4px;
+}
+
+.lp-plan-price strong {
+  font-size: clamp(22px, 2.2vw, 30px);
+  line-height: 1.25;
+}
+
+.lp-plan-price small {
+  color: var(--landing-muted, #5d6b7c);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.lp-mockup-topbar strong {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.marketing-v2 .seo-section {
+  border-color: var(--landing-line, #dbe6ee);
+  background: linear-gradient(145deg, #f7faff, #fff 65%);
+  box-shadow: 0 20px 56px rgba(35, 72, 104, 0.08);
+}
+
+.marketing-v2 .seo-section::before {
+  opacity: 0.35;
+  background-image: linear-gradient(rgba(49, 87, 255, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(49, 87, 255, 0.045) 1px, transparent 1px);
+}
+
+.marketing-v2 .seo-grid article {
+  border-color: var(--landing-line, #dbe6ee);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(35, 72, 104, 0.05);
+}
+
+.marketing-v2 .seo-grid h3 {
+  color: var(--landing-ink, #102033);
+}
+
+.marketing-v2 .seo-grid p {
+  color: var(--landing-muted, #5d6b7c);
+}
+
+.public-summary strong {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.public-summary small,
+.pricing-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 920px) {
+  .marketing-v2 .seo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .deployment-section {
+    padding: 56px 20px;
+  }
+
+  .deployment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .marketing-v2 .seo-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1180px) {
   .lp-hero {
     grid-template-columns: 1fr;
