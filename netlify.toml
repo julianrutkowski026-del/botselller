@@ -1,0 +1,3 @@
+[build.environment]
+# Keep secret scanning enabled; omit only the two non-secret values Netlify flagged.
+SECRETS_SCAN_OMIT_KEYS = "SUPABASE_ATTACHMENTS_BUCKET,OPENAI_MODEL"
