@@ -34,8 +34,8 @@ function startOfNextUtcDay(date = new Date()) {
   return next;
 }
 
-async function safeCount(table: string, filters?: (query: any) => any) {
-  let query = adminDb().from(table).select("id", { count: "exact", head: true });
+async function safeCount(table: string, filters?: (query: any) => any, countColumn = "id") {
+  let query = adminDb().from(table).select(countColumn, { count: "exact", head: true });
   if (filters) query = filters(query);
   const { count, error } = await query;
   return { ok: !error, count: count || 0, error: error?.message || null };
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
     safeCount("campaigns", (q) => q.eq("status", "active").or("daily_limit.is.null,workday_start_hour.is.null,workday_end_hour.is.null,sending_timezone.is.null,bot_id.is.null")),
     safeCount("send_queue", (q) => q.eq("status", "pending")),
     safeCount("send_queue", (q) => q.eq("status", "failed")),
-    safeCount("system_locks"),
+    safeCount("system_locks", undefined, "name"),
     adminDb()
       .from("messages")
       .select("id", { count: "exact", head: true })

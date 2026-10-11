@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "test:scheduler": "node tests/scheduler-math.test.mjs",
     "test": "npm run test:scheduler && npm run test:guards",
