@@ -33,6 +33,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       to,
       subject: "Test SMTP FluxBase BotSeller",
       body: "To jest testowa wiadomość SMTP z panelu FluxBase BotSeller. Jeśli ją widzisz, konfiguracja wysyłki działa.",
+      language: "pl",
     });
     await adminDb().from("audit_logs").insert({ actor_email: auth.user.email, action: "test_smtp", resource: "client_accounts", resource_id: id.data, details: { to } });
     return NextResponse.json({ ok: true }, { headers: noStoreHeaders });

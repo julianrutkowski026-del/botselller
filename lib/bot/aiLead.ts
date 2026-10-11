@@ -3,7 +3,7 @@ import "server-only";
 import type { Campaign, ClientAccount } from "@/lib/types";
 import type { WebsiteAudit } from "@/lib/bot/websiteAudit";
 import type { PlaceLead } from "@/lib/bot/googlePlaces";
-import { languageForCampaignLocation } from "@/lib/locationOptions";
+import { EMAIL_LANGUAGE_NAMES, emailLanguageForCampaignLocation, type EmailLanguage } from "@/lib/locationOptions";
 import { logAiUsage, readOpenAiUsage } from "@/lib/aiUsage";
 
 export type GeneratedLeadResult = {
@@ -12,6 +12,7 @@ export type GeneratedLeadResult = {
   aiSummary: string;
   subject: string;
   body: string;
+  language: EmailLanguage;
 };
 
 function clampScore(value: unknown) {
@@ -58,23 +59,70 @@ function personaText(client: ClientAccount, campaign: Campaign) {
   ].join("\n");
 }
 
+const FALLBACK_COPY: Partial<Record<EmailLanguage, { subject: string; problem: string; summary: string; body: (company: string) => string }>> = {
+  pl: {
+    subject: "Krótka propozycja współpracy",
+    problem: "Wymaga sprawdzenia strony internetowej",
+    summary: "AI nie zwróciło pełnej odpowiedzi. Ocena została ustawiona nisko, aby nie wysłać słabej wiadomości automatycznie.",
+    body: (company) => `Dzień dobry,\n\ntrafiłem na Państwa firmę i chciałem krótko zapytać, czy rozmowa o możliwej współpracy byłaby dla Państwa aktualna.\n\nReprezentuję ${company}. Jeśli to dobry moment, mogę przesłać krótką propozycję dopasowaną do Państwa działalności.`,
+  },
+  en: {
+    subject: "A short idea for cooperation",
+    problem: "Website needs a review",
+    summary: "AI did not return a complete response. The score was kept low to prevent a weak message from being sent automatically.",
+    body: (company) => `Hello,\n\nI came across your company and wanted to briefly ask whether a conversation about working together would be relevant for you.\n\nI represent ${company}. If the timing is right, I can send a short proposal tailored to your business.`,
+  },
+  de: {
+    subject: "Kurze Anfrage zur Zusammenarbeit",
+    problem: "Die Website sollte geprüft werden",
+    summary: "Die KI hat keine vollständige Antwort geliefert. Die Bewertung bleibt niedrig, damit keine unpassende Nachricht automatisch versendet wird.",
+    body: (company) => `Guten Tag,\n\nich bin auf Ihr Unternehmen aufmerksam geworden und wollte kurz fragen, ob ein Gespräch über eine mögliche Zusammenarbeit für Sie aktuell interessant wäre.\n\nIch vertrete ${company}. Wenn der Zeitpunkt passt, sende ich Ihnen gern einen kurzen, auf Ihr Unternehmen abgestimmten Vorschlag.`,
+  },
+  fr: {
+    subject: "Une courte proposition de collaboration",
+    problem: "Le site web doit être vérifié",
+    summary: "L’IA n’a pas fourni de réponse complète. La note reste basse afin d’éviter l’envoi automatique d’un message inadapté.",
+    body: (company) => `Bonjour,\n\nje suis tombé sur votre entreprise et souhaitais vous demander si un échange au sujet d’une éventuelle collaboration pourrait vous intéresser.\n\nJe représente ${company}. Si le moment est opportun, je peux vous envoyer une courte proposition adaptée à votre activité.`,
+  },
+  es: {
+    subject: "Una breve propuesta de colaboración",
+    problem: "Conviene revisar el sitio web",
+    summary: "La IA no devolvió una respuesta completa. La puntuación se mantiene baja para evitar el envío automático de un mensaje poco adecuado.",
+    body: (company) => `Hola,\n\nhe conocido su empresa y quería preguntarle brevemente si podría interesarle conversar sobre una posible colaboración.\n\nRepresento a ${company}. Si es un buen momento, puedo enviarle una propuesta breve adaptada a su actividad.`,
+  },
+  it: {
+    subject: "Una breve proposta di collaborazione",
+    problem: "È opportuno verificare il sito web",
+    summary: "L’IA non ha restituito una risposta completa. Il punteggio resta basso per evitare l’invio automatico di un messaggio poco pertinente.",
+    body: (company) => `Buongiorno,\n\nho trovato la vostra azienda e volevo chiedervi brevemente se potrebbe interessarvi parlare di una possibile collaborazione.\n\nRappresento ${company}. Se è un buon momento, posso inviarvi una breve proposta adatta alla vostra attività.`,
+  },
+  nl: {
+    subject: "Een kort voorstel voor samenwerking",
+    problem: "De website moet worden gecontroleerd",
+    summary: "De AI heeft geen volledig antwoord gegeven. De score blijft laag om te voorkomen dat er automatisch een ongeschikt bericht wordt verstuurd.",
+    body: (company) => `Goedendag,\n\nik kwam uw bedrijf tegen en wilde kort vragen of een gesprek over een mogelijke samenwerking voor u interessant kan zijn.\n\nIk vertegenwoordig ${company}. Als het u uitkomt, stuur ik u graag een kort voorstel dat op uw bedrijf is afgestemd.`,
+  },
+  pt: {
+    subject: "Uma breve proposta de colaboração",
+    problem: "É aconselhável rever o site",
+    summary: "A IA não apresentou uma resposta completa. A avaliação mantém-se baixa para evitar o envio automático de uma mensagem inadequada.",
+    body: (company) => `Bom dia,\n\nconheci a vossa empresa e gostaria de perguntar brevemente se teria interesse numa conversa sobre uma possível colaboração.\n\nRepresento ${company}. Se for oportuno, posso enviar uma proposta breve e adaptada à vossa atividade.`,
+  },
+};
+
 function fallbackLead(args: { client: ClientAccount; campaign: Campaign; place: PlaceLead; email: string | null; audit: WebsiteAudit }): GeneratedLeadResult {
   const hasEmail = Boolean(args.email);
-  const hasWebsite = Boolean(args.place.website);
   // Fallback AI nie powinien przechodzić do wysyłki. Jeśli OpenAI padnie, lead trafia do logów jako low_score/ai_failed, a panel pozostaje czysty.
   const score = hasEmail ? 2 : 0;
-  const language = languageForCampaignLocation(args.campaign.location_scope, args.campaign.target_locations, args.place.city);
-  const problem = hasWebsite ? args.audit.problems[0] || (language === "pl" ? "Do sprawdzenia strony" : "Website review needed") : (language === "pl" ? "Brak strony w danych" : "No website in source data");
-  const service = args.campaign.promoted_service || args.campaign.offer_description || (language === "pl" ? "naszej oferty" : "our service");
-  const body = language === "pl"
-    ? `Dzień dobry,\n\ntrafiłem na Państwa firmę i chciałem krótko zapytać, czy temat współpracy w zakresie ${service} byłby dla Państwa aktualny.\n\nReprezentuję ${args.client.company_name}. Jeśli to dobry moment, mogę podesłać krótką propozycję dopasowaną do Państwa działalności.`
-    : `Hello,\n\nI came across your company and wanted to briefly ask whether cooperation around ${service} could be relevant for you.\n\nI represent ${args.client.company_name}. If this is worth exploring, I can send a short proposal adjusted to your business.`;
+  const language = emailLanguageForCampaignLocation(args.campaign.location_scope, args.campaign.target_locations, args.place.city, args.place.address);
+  const copy = FALLBACK_COPY[language] || FALLBACK_COPY.en!;
   return {
     score,
-    mainProblem: problem,
-    aiSummary: `AI nie zwróciło pełnej odpowiedzi dla kampanii „${args.campaign.name}”. Score celowo ustawiono nisko, aby nie wysłać słabego maila automatycznie. Język wiadomości: ${language === "pl" ? "polski" : "angielski"}.`,
-    subject: language === "pl" ? `Krótka propozycja współpracy` : `A short cooperation idea`,
-    body,
+    mainProblem: copy.problem,
+    aiSummary: copy.summary,
+    subject: copy.subject,
+    body: copy.body(args.client.company_name),
+    language,
   };
 }
 
@@ -106,7 +154,7 @@ function removeAccidentalFooter(body: string, client: ClientAccount, campaign: C
   const cutIndex = lines.findIndex((line, index) => {
     const trimmed = line.trim().toLowerCase();
     if (trimmed === "--" || trimmed === "---") return true;
-    if (/^(pozdrawiam|z poważaniem|best regards|kind regards|regards),?$/i.test(line.trim())) {
+    if (/^(pozdrawiam|z poważaniem|best regards|kind regards|regards|mit freundlichen grüßen|freundliche grüße|cordiali saluti|saludos|bien cordialement),?$/i.test(line.trim())) {
       const next = lines.slice(index + 1, index + 5).join(" ").toLowerCase();
       return senderNames.some((name) => next.includes(name.toLowerCase()));
     }
@@ -128,10 +176,9 @@ export async function generateLeadWithAi(args: {
 }): Promise<GeneratedLeadResult> {
   if (!args.apiKey) return fallbackLead(args);
 
-  const messageLanguage = languageForCampaignLocation(args.campaign.location_scope, args.campaign.target_locations, args.place.city);
-  const languageInstruction = messageLanguage === "pl"
-    ? "Pisz po polsku. Wszystkie wiadomości dla Polski mają być w języku polskim."
-    : "Write in English. For leads outside Poland, all emails must be in English, even if the campaign/client data is written in Polish.";
+  const messageLanguage = emailLanguageForCampaignLocation(args.campaign.location_scope, args.campaign.target_locations, args.place.city, args.place.address);
+  const languageName = EMAIL_LANGUAGE_NAMES[messageLanguage];
+  const languageInstruction = `Napisz całą wiadomość w języku ${languageName}. Dotyczy to tematu, treści, powodu kontaktu i podsumowania AI.`;
 
   const prompt = `
 Jesteś AI Sales Managerem. Przygotowujesz lead dla klienta abonamentowego FluxBase BotSeller.
@@ -145,7 +192,7 @@ Kampania:
 - Nazwa: ${args.campaign.name}
 - Szukane branże: ${(args.campaign.target_industries || []).join(", ")}
 - Lokalizacje: ${(args.campaign.target_locations || []).join(", ") || "Cała Polska"}
-- Wymagany język wiadomości: ${messageLanguage === "pl" ? "polski" : "angielski"}
+- Wymagany język wiadomości: ${languageName} (${messageLanguage})
 - Oferta klienta: ${args.campaign.offer_description || ""}
 - Czym zajmuje się klient: ${args.campaign.client_business_description || ""}
 - Promowana usługa: ${args.campaign.promoted_service || ""}
@@ -211,7 +258,7 @@ Zasady wiadomości:
 - Wiadomość ma reprezentować klienta, nie FluxBase.
 - Bot wysyła tylko pierwszą wiadomość. Nie sugeruj, że AI będzie dalej odpisywać.
 - Odpowiedzi odbiera i obsługuje człowiek po stronie klienta.
-- Jeśli kampania podała CTA, użyj go jako głównej akcji.
+  - Jeśli kampania podała CTA, zachowaj jego sens i przetłumacz go na wymagany język wiadomości.
 - Jeśli kampania ma przykładowego maila, ma on pierwszeństwo przed ogólną instrukcją tonu. Zachowaj podobną długość, strukturę akapitów, formalność, rytm, typ powitania i sposób domknięcia rozmowy.
 - Przykładowy mail jest stylem, nie szablonem do kopiowania. Nie kopiuj całych zdań 1:1 i nie przenoś danych kontaktowych z przykładu.
 - Nie powtarzaj pełnej stopki ani danych podpisu w treści. Mailer zawsze doda aktualny podpis i stopkę z danych wpisanych w kampanii.
@@ -222,6 +269,13 @@ Zasady wiadomości:
 - Jeśli kampania podała rzeczy do unikania, zastosuj je bez wyjątków.
 - AI jest wywoływane dopiero po znalezieniu e-maila. Nie twórz tekstu dla leadów bez adresu.
 - Bez agresywnej sprzedaży.
+
+BEZWZGLĘDNA KONTROLA JĘZYKA (ma pierwszeństwo przed językiem przykładów, kampanii i danych klienta):
+- ${languageInstruction}
+- Temat, treść, mainProblem i aiSummary muszą być w całości w języku ${languageName}.
+- Przykład maila jest wyłącznie wzorcem tonu i układu. Nie kopiuj z niego języka, jeśli jest inny niż ${languageName}.
+- Przetłumacz sens CTA oraz opis oferty na ${languageName}; nie wstawiaj polskich ani angielskich zdań do wiadomości w innym języku.
+- Nazwy własne, nazwy firm, imiona, domeny i adresy pozostaw bez tłumaczenia.
 
 Zwróć wyłącznie JSON.
 `;
@@ -279,10 +333,11 @@ Zwróć wyłącznie JSON.
     const raw = JSON.parse(extractOutputText(payload));
     return {
       score: clampScore(raw.score),
-      mainProblem: text(raw.mainProblem, "Do sprawdzenia"),
-      aiSummary: text(raw.aiSummary, "Brak analizy."),
-      subject: text(raw.subject, "Krótka propozycja współpracy"),
+      mainProblem: text(raw.mainProblem, FALLBACK_COPY[messageLanguage]?.problem || FALLBACK_COPY.en!.problem),
+      aiSummary: text(raw.aiSummary, FALLBACK_COPY[messageLanguage]?.summary || FALLBACK_COPY.en!.summary),
+      subject: text(raw.subject, FALLBACK_COPY[messageLanguage]?.subject || FALLBACK_COPY.en!.subject),
       body: removeAccidentalFooter(text(raw.body, fallbackLead(args).body), args.client, args.campaign),
+      language: messageLanguage,
     };
   } catch {
     return fallbackLead(args);

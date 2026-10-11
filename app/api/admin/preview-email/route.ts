@@ -78,10 +78,11 @@ export async function POST(request: Request) {
         score: generated.score,
         mainProblem: generated.mainProblem,
         aiSummary: generated.aiSummary,
+        language: generated.language,
         subject: generated.subject,
         body: generated.body,
-        text: buildLeadEmailText({ body: generated.body, persona, client: client as unknown as ClientAccount, to: email, campaign }),
-        html: buildLeadEmailHtml({ body: generated.body, persona, client: client as unknown as ClientAccount, to: email, campaign }),
+        text: buildLeadEmailText({ body: generated.body, persona, client: client as unknown as ClientAccount, to: email, campaign, language: generated.language, recipientLocation: place.address || place.city }),
+        html: buildLeadEmailHtml({ body: generated.body, persona, client: client as unknown as ClientAccount, to: email, campaign, language: generated.language, recipientLocation: place.address || place.city }),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

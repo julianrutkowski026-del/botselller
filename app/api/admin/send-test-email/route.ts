@@ -137,6 +137,8 @@ export async function POST(request: Request) {
       subject: generated.subject || `Test kampanii: ${campaign.name}`,
       body: generated.body,
       campaign,
+      language: generated.language,
+      recipientLocation: place.address || place.city,
       attachments,
     });
 

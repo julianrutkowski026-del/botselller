@@ -123,15 +123,26 @@ function DnsCheckPanel({ result, onCheck }: { result?: DnsCheckResult; onCheck: 
   );
 }
 
-function TestEmailPreview({ form, client }: { form: typeof initialCampaignForm; client?: ClientAccount | null }) {
+const EMAIL_PREVIEW_LABELS = {
+  subject: { pl: "Temat", en: "Subject", de: "Betreff", fr: "Objet", es: "Asunto", it: "Oggetto", nl: "Onderwerp", pt: "Assunto", cs: "Předmět", sk: "Predmet", da: "Emne", sv: "Ämne", no: "Emne", fi: "Aihe", ro: "Subiect", hu: "Tárgy", el: "Θέμα", uk: "Тема" },
+  score: { pl: "Ocena AI", en: "AI score", de: "KI-Bewertung", fr: "Évaluation de l’IA", es: "Puntuación de IA", it: "Valutazione AI", nl: "AI-score", pt: "Avaliação da IA", cs: "Hodnocení AI", sk: "Hodnotenie AI", da: "AI-vurdering", sv: "AI-bedömning", no: "AI-vurdering", fi: "Tekoälyn arvio", ro: "Evaluare AI", hu: "AI-értékelés", el: "Αξιολόγηση AI", uk: "Оцінка ШІ" },
+  analysis: { pl: "Analiza", en: "Analysis", de: "Analyse", fr: "Analyse", es: "Análisis", it: "Analisi", nl: "Analyse", pt: "Análise", cs: "Analýza", sk: "Analýza", da: "Analyse", sv: "Analys", no: "Analyse", fi: "Analyysi", ro: "Analiză", hu: "Elemzés", el: "Ανάλυση", uk: "Аналіз" },
+} as const;
+
+function previewLabel(labels: Record<string, string>, language?: string) {
+  return labels[language || "pl"] || labels.pl;
+}
+
+function TestEmailPreview({ form }: { form: typeof initialCampaignForm }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState<{ subject: string; body: string; text?: string; score?: number; aiSummary?: string } | null>(null);
+  const [preview, setPreview] = useState<{ subject: string; body: string; text?: string; score?: number; aiSummary?: string; language?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function generatePreview() {
     setOpen(true);
     setLoading(true);
+    setPreview(null);
     setError(null);
     try {
       const supabase = getSupabaseBrowserClient();
@@ -144,37 +155,15 @@ function TestEmailPreview({ form, client }: { form: typeof initialCampaignForm; 
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ campaign: form }),
       });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string; subject?: string; body?: string; text?: string; score?: number; aiSummary?: string };
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; subject?: string; body?: string; text?: string; score?: number; aiSummary?: string; language?: string };
       if (!response.ok) throw new Error(payload.error || "Nie udało się wygenerować podglądu.");
-      setPreview({ subject: payload.subject || "Bez tematu", body: payload.body || "", text: payload.text, score: payload.score, aiSummary: payload.aiSummary });
+      setPreview({ subject: payload.subject || "Bez tematu", body: payload.body || "", text: payload.text, score: payload.score, aiSummary: payload.aiSummary, language: payload.language });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Nie udało się wygenerować podglądu.");
     } finally {
       setLoading(false);
     }
   }
-
-  const persona = [form.bot_first_name || client?.bot_first_name, form.bot_last_name || client?.bot_last_name].filter(Boolean).join(" ") || client?.sender_name || client?.contact_name || "Jan Kowalski";
-  const role = form.bot_role || client?.bot_role || "Business Development";
-  const company = form.signature_company || client?.signature_company || client?.company_name || "Twoja firma";
-  const website = form.signature_website || client?.signature_website || client?.website || "twojastrona.pl";
-  const target = form.target_audience_niche || form.target_industries || "wybranych firm";
-  const service = form.promoted_service || form.offer_description || "naszej usługi";
-  const cta = form.call_to_action || "Czy możemy przesłać krótką propozycję?";
-  const fallbackSubject = `Krótka propozycja dla ${target.toString().split(",")[0] || "Państwa firmy"}`;
-  const fallbackBody = `Dzień dobry,
-
-trafiłem na Państwa firmę i chciałem krótko zapytać, czy temat ${service} może być dla Państwa aktualny.
-
-${cta}
-
-Pozdrawiam,
-${persona}
-${role}
-${company}
-${website}`;
-  const shownSubject = preview?.subject || fallbackSubject;
-  const shownBody = preview?.text || preview?.body || fallbackBody;
 
   return (
     <div className="mail-preview-card span">
@@ -188,15 +177,17 @@ ${website}`;
         </button>
       </div>
       {error ? <p className="danger-text">{error}</p> : null}
-      {open ? (
-        <pre><strong>Temat:</strong> {shownSubject}
-{preview?.score !== undefined ? `
-Score AI: ${preview.score}/10
-` : ""}{preview?.aiSummary ? `
-Analiza: ${preview.aiSummary}
+      {open ? loading ? (
+        <p className="muted-small">Generuję podgląd w języku lokalizacji kampanii…</p>
+      ) : preview ? (
+        <pre><strong>{previewLabel(EMAIL_PREVIEW_LABELS.subject, preview.language)}:</strong> {preview.subject}
+{preview.score !== undefined ? `
+${previewLabel(EMAIL_PREVIEW_LABELS.score, preview.language)}: ${preview.score}/10
+` : ""}{preview.aiSummary ? `
+${previewLabel(EMAIL_PREVIEW_LABELS.analysis, preview.language)}: ${preview.aiSummary}
 ` : ""}
-{shownBody}</pre>
-      ) : <p className="muted-small">Podgląd nie wysyła wiadomości. Jeśli OpenAI nie jest ustawione, endpoint użyje bezpiecznego fallbacku.</p>}
+{preview.text || preview.body}</pre>
+      ) : <p className="muted-small">Kliknij „Wygeneruj AI”, aby zobaczyć kompletny podgląd wiadomości.</p> : <p className="muted-small">Podgląd nie wysyła wiadomości. Jeśli OpenAI nie jest ustawione, endpoint użyje bezpiecznego fallbacku.</p>}
     </div>
   );
 }
@@ -1528,7 +1519,7 @@ export function ClientDetailPanel({
           <InputField label="Godzina końca" value={campaignDraft.workday_end_hour} onChange={(value) => setCampaignDraft({ ...campaignDraft, workday_end_hour: value })} inputMode="numeric" />
           <InputField label="Strefa czasu" value={campaignDraft.sending_timezone} onChange={(value) => setCampaignDraft({ ...campaignDraft, sending_timezone: value })} placeholder="Europe/Warsaw" />
           <CampaignSchedulePreview form={campaignDraft} client={client} />
-          <TestEmailPreview form={campaignDraft} client={client} />
+          <TestEmailPreview form={campaignDraft} />
           <CampaignTestEmailSender form={campaignDraft} />
           <FilterCheck label="Włącz follow-upy dla tej kampanii" checked={Boolean(campaignDraft.follow_ups_enabled)} onChange={(checked) => setCampaignDraft({ ...campaignDraft, follow_ups_enabled: checked })} />
           <InputField label="Follow-up po ilu dniach" value={campaignDraft.follow_up_delay_days} onChange={(value) => setCampaignDraft({ ...campaignDraft, follow_up_delay_days: value })} inputMode="numeric" help={Boolean(campaignDraft.follow_ups_enabled) ? "Po ilu dniach od pierwszego maila bot ma wysłać przypomnienie." : "Nieaktywne, dopóki follow-upy są wyłączone."} />
@@ -1564,7 +1555,7 @@ export function ClientDetailPanel({
             <InputField label="Godzina końca" value={campaignEditForm.workday_end_hour} onChange={(value) => setCampaignEditForm({ ...campaignEditForm, workday_end_hour: value })} inputMode="numeric" />
             <InputField label="Strefa czasu" value={campaignEditForm.sending_timezone} onChange={(value) => setCampaignEditForm({ ...campaignEditForm, sending_timezone: value })} />
             <CampaignSchedulePreview form={campaignEditForm} client={client} />
-                  <TestEmailPreview form={campaignEditForm} client={client} />
+                  <TestEmailPreview form={campaignEditForm} />
                   <CampaignTestEmailSender form={campaignEditForm} campaignId={campaign.id} />
                   <SelectField label="Status" value={campaignEditForm.status} onChange={(value) => setCampaignEditForm({ ...campaignEditForm, status: value })}>
                     {CAMPAIGN_STATUSES.map((status) => (
@@ -1828,7 +1819,7 @@ export function CampaignsView({
             <InputField label="Godzina końca" value={form.workday_end_hour} onChange={(value) => setForm({ ...form, workday_end_hour: value })} inputMode="numeric" />
             <InputField label="Strefa czasu" value={form.sending_timezone} onChange={(value) => setForm({ ...form, sending_timezone: value })} />
             <CampaignSchedulePreview form={form} client={clients.find((client) => client.id === form.client_id)} />
-            <TestEmailPreview form={form} client={clients.find((client) => client.id === form.client_id)} />
+            <TestEmailPreview form={form} />
             <CampaignTestEmailSender form={form} />
             <FilterCheck label="Włącz follow-upy dla tej kampanii" checked={Boolean(form.follow_ups_enabled)} onChange={(checked) => setForm({ ...form, follow_ups_enabled: checked })} />
             <InputField label="Follow-up po ilu dniach" value={form.follow_up_delay_days} onChange={(value) => setForm({ ...form, follow_up_delay_days: value })} inputMode="numeric" help={Boolean(form.follow_ups_enabled) ? "Po ilu dniach od pierwszego maila bot ma wysłać przypomnienie." : "Nieaktywne, dopóki follow-upy są wyłączone."} />
@@ -1891,7 +1882,7 @@ export function CampaignsView({
             <InputField label="Godzina końca" value={campaignEditForm.workday_end_hour} onChange={(value) => setCampaignEditForm({ ...campaignEditForm, workday_end_hour: value })} inputMode="numeric" />
             <InputField label="Strefa czasu" value={campaignEditForm.sending_timezone} onChange={(value) => setCampaignEditForm({ ...campaignEditForm, sending_timezone: value })} />
             <CampaignSchedulePreview form={campaignEditForm} client={clients.find((client) => client.id === campaignEditForm.client_id)} />
-            <TestEmailPreview form={campaignEditForm} client={clients.find((client) => client.id === campaignEditForm.client_id)} />
+            <TestEmailPreview form={campaignEditForm} />
             <CampaignTestEmailSender form={campaignEditForm} campaignId={editingCampaignId} />
             <FilterCheck label="Włącz follow-upy dla tej kampanii" checked={Boolean(campaignEditForm.follow_ups_enabled)} onChange={(checked) => setCampaignEditForm({ ...campaignEditForm, follow_ups_enabled: checked })} />
             <InputField label="Follow-up po dniach" value={campaignEditForm.follow_up_delay_days} onChange={(value) => setCampaignEditForm({ ...campaignEditForm, follow_up_delay_days: value })} inputMode="numeric" help={Boolean(campaignEditForm.follow_ups_enabled) ? "Po ilu dniach od pierwszego maila bot ma wysłać przypomnienie." : "Nieaktywne, dopóki follow-upy są wyłączone."} />

@@ -15,7 +15,10 @@ export type PlaceLead = {
 function cityFromAddress(address: string | undefined, fallback: string) {
   if (!address) return fallback;
   const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
-  return parts.length >= 2 ? parts[parts.length - 2] : fallback;
+  if (parts.length < 2) return fallback;
+  const city = parts[parts.length - 2].replace(/^\d{4,6}\s+/, "");
+  const country = parts[parts.length - 1];
+  return country ? `${city}, ${country}` : city || fallback;
 }
 
 export async function searchGooglePlaces(args: {

@@ -4,7 +4,7 @@ import nodemailer from "nodemailer";
 
 import { decryptSecret } from "@/lib/cryptoSecrets";
 import { getActiveSecret } from "@/lib/secretStore";
-import { languageForCampaignLocation } from "@/lib/locationOptions";
+import { emailLanguageForCampaignLocation, type EmailLanguage } from "@/lib/locationOptions";
 import type { Campaign, ClientAccount } from "@/lib/types";
 
 type ClientMailSecrets = ClientAccount & {
@@ -26,6 +26,8 @@ type SendMailArgs = {
   body: string;
   campaignName?: string | null;
   campaign?: Campaign | null;
+  language?: EmailLanguage;
+  recipientLocation?: string | null;
   attachments?: BotMailAttachment[];
   trackingId?: string | null;
 };
@@ -169,58 +171,80 @@ export function buildEmailSignatureHtml(persona: SenderPersona) {
   return `<div style="margin-top:22px;color:#111827;line-height:1.55;">${lines}</div>`;
 }
 
-function senderFooterLines(client: ClientMailSecrets, persona: SenderPersona, language: "pl" | "en") {
-  const company = persona.company || cleanFooterValue(client.company_name) || (language === "pl" ? "firma" : "the company");
+const FOOTER_COPY: Record<EmailLanguage, {
+  contact: string;
+  role: string;
+  company: string;
+  website: string;
+  phone: string;
+  address: string;
+  sent: (company: string) => string;
+  replies: string;
+  header: string;
+}> = {
+  pl: { contact: "Osoba kontaktowa", role: "Stanowisko", company: "Firma", website: "Strona", phone: "Telefon", address: "Adres", sent: (company) => `Wiadomość została wysłana w imieniu ${company}.`, replies: "Odpowiedzi trafiają do:", header: "Dane nadawcy z kampanii" },
+  en: { contact: "Contact person", role: "Role", company: "Company", website: "Website", phone: "Phone", address: "Address", sent: (company) => `This message was sent on behalf of ${company}.`, replies: "Replies go to:", header: "Campaign sender details" },
+  de: { contact: "Kontaktperson", role: "Position", company: "Unternehmen", website: "Webseite", phone: "Telefon", address: "Adresse", sent: (company) => `Diese Nachricht wurde im Auftrag von ${company} gesendet.`, replies: "Antworten gehen an:", header: "Absenderangaben" },
+  fr: { contact: "Personne à contacter", role: "Fonction", company: "Entreprise", website: "Site web", phone: "Téléphone", address: "Adresse", sent: (company) => `Ce message a été envoyé au nom de ${company}.`, replies: "Réponses à envoyer à :", header: "Coordonnées de l’expéditeur" },
+  es: { contact: "Persona de contacto", role: "Cargo", company: "Empresa", website: "Sitio web", phone: "Teléfono", address: "Dirección", sent: (company) => `Este mensaje se envió en nombre de ${company}.`, replies: "Las respuestas se envían a:", header: "Datos del remitente" },
+  it: { contact: "Referente", role: "Ruolo", company: "Azienda", website: "Sito web", phone: "Telefono", address: "Indirizzo", sent: (company) => `Questo messaggio è stato inviato per conto di ${company}.`, replies: "Le risposte sono inviate a:", header: "Dati del mittente" },
+  nl: { contact: "Contactpersoon", role: "Functie", company: "Bedrijf", website: "Website", phone: "Telefoon", address: "Adres", sent: (company) => `Dit bericht is verzonden namens ${company}.`, replies: "Antwoorden gaan naar:", header: "Gegevens van de afzender" },
+  pt: { contact: "Pessoa de contacto", role: "Função", company: "Empresa", website: "Site", phone: "Telefone", address: "Morada", sent: (company) => `Esta mensagem foi enviada em nome de ${company}.`, replies: "As respostas devem ser enviadas para:", header: "Dados do remetente" },
+  cs: { contact: "Kontaktní osoba", role: "Pozice", company: "Společnost", website: "Web", phone: "Telefon", address: "Adresa", sent: (company) => `Tato zpráva byla odeslána jménem společnosti ${company}.`, replies: "Odpovědi směřujte na:", header: "Údaje odesílatele" },
+  sk: { contact: "Kontaktná osoba", role: "Pozícia", company: "Spoločnosť", website: "Web", phone: "Telefón", address: "Adresa", sent: (company) => `Táto správa bola odoslaná v mene spoločnosti ${company}.`, replies: "Odpovede posielajte na:", header: "Údaje odosielateľa" },
+  da: { contact: "Kontaktperson", role: "Stilling", company: "Virksomhed", website: "Hjemmeside", phone: "Telefon", address: "Adresse", sent: (company) => `Denne besked er sendt på vegne af ${company}.`, replies: "Svar sendes til:", header: "Afsenderoplysninger" },
+  sv: { contact: "Kontaktperson", role: "Roll", company: "Företag", website: "Webbplats", phone: "Telefon", address: "Adress", sent: (company) => `Det här meddelandet skickades på uppdrag av ${company}.`, replies: "Svar skickas till:", header: "Avsändaruppgifter" },
+  no: { contact: "Kontaktperson", role: "Rolle", company: "Bedrift", website: "Nettsted", phone: "Telefon", address: "Adresse", sent: (company) => `Denne meldingen ble sendt på vegne av ${company}.`, replies: "Svar sendes til:", header: "Avsenderopplysninger" },
+  fi: { contact: "Yhteyshenkilö", role: "Tehtävä", company: "Yritys", website: "Verkkosivusto", phone: "Puhelin", address: "Osoite", sent: (company) => `Tämä viesti lähetettiin yrityksen ${company} puolesta.`, replies: "Vastaukset osoitteeseen:", header: "Lähettäjän tiedot" },
+  ro: { contact: "Persoană de contact", role: "Funcție", company: "Companie", website: "Site web", phone: "Telefon", address: "Adresă", sent: (company) => `Acest mesaj a fost trimis în numele companiei ${company}.`, replies: "Răspunsurile se trimit la:", header: "Datele expeditorului" },
+  hu: { contact: "Kapcsolattartó", role: "Beosztás", company: "Cég", website: "Weboldal", phone: "Telefon", address: "Cím", sent: (company) => `Ezt az üzenetet a(z) ${company} nevében küldtük.`, replies: "A válaszokat erre a címre küldje:", header: "Feladói adatok" },
+  el: { contact: "Υπεύθυνος επικοινωνίας", role: "Θέση", company: "Εταιρεία", website: "Ιστότοπος", phone: "Τηλέφωνο", address: "Διεύθυνση", sent: (company) => `Το μήνυμα στάλθηκε εκ μέρους της εταιρείας ${company}.`, replies: "Οι απαντήσεις αποστέλλονται στη διεύθυνση:", header: "Στοιχεία αποστολέα" },
+  uk: { contact: "Контактна особа", role: "Посада", company: "Компанія", website: "Вебсайт", phone: "Телефон", address: "Адреса", sent: (company) => `Це повідомлення надіслано від імені компанії ${company}.`, replies: "Відповіді надсилайте на адресу:", header: "Дані відправника" },
+};
+
+function senderFooterLines(client: ClientMailSecrets, persona: SenderPersona, language: EmailLanguage) {
+  const copy = FOOTER_COPY[language];
+  const company = persona.company || cleanFooterValue(client.company_name) || FOOTER_COPY[language].company.toLowerCase();
   const replyTo = persona.replyTo || cleanFooterValue(client.smtp_reply_to) || cleanFooterValue(client.sender_email) || cleanFooterValue(client.contact_email);
 
   const contactLines = [
-    persona.fullName ? (language === "pl" ? `Osoba kontaktowa: ${persona.fullName}` : `Contact person: ${persona.fullName}`) : "",
-    persona.role ? (language === "pl" ? `Stanowisko: ${persona.role}` : `Role: ${persona.role}`) : "",
-    persona.company ? (language === "pl" ? `Firma: ${persona.company}` : `Company: ${persona.company}`) : "",
-    persona.website ? (language === "pl" ? `Strona: ${persona.website}` : `Website: ${persona.website}`) : "",
-    persona.email ? (language === "pl" ? `Email: ${persona.email}` : `Email: ${persona.email}`) : "",
-    persona.phone ? (language === "pl" ? `Telefon: ${persona.phone}` : `Phone: ${persona.phone}`) : "",
-    persona.address ? (language === "pl" ? `Adres: ${persona.address}` : `Address: ${persona.address}`) : "",
+    persona.fullName ? `${copy.contact}: ${persona.fullName}` : "",
+    persona.role ? `${copy.role}: ${persona.role}` : "",
+    persona.company ? `${copy.company}: ${persona.company}` : "",
+    persona.website ? `${copy.website}: ${persona.website}` : "",
+    persona.email ? `Email: ${persona.email}` : "",
+    persona.phone ? `${copy.phone}: ${persona.phone}` : "",
+    persona.address ? `${copy.address}: ${persona.address}` : "",
   ].filter(Boolean);
 
-  const legalLines = language === "pl"
-    ? [
-        `Wiadomość została wysłana w imieniu ${company}.`,
-        replyTo ? `Odpowiedzi trafiają do: ${replyTo}` : "",
-        persona.footerNote,
-      ]
-    : [
-        `This message was sent on behalf of ${company}.`,
-        replyTo ? `Replies go to: ${replyTo}` : "",
-        persona.footerNote,
-      ];
+  const legalLines = [copy.sent(company), replyTo ? `${copy.replies} ${replyTo}` : "", persona.footerNote];
 
   return [...contactLines, ...legalLines].filter(Boolean);
 }
 
-function mailFooter(client: ClientMailSecrets, persona: SenderPersona, language: "pl" | "en") {
+function mailFooter(client: ClientMailSecrets, persona: SenderPersona, language: EmailLanguage) {
   const lines = senderFooterLines(client, persona, language);
   return lines.length ? `\n\n---\n${lines.join("\n")}` : "";
 }
 
-function mailFooterHtml(client: ClientMailSecrets, persona: SenderPersona, language: "pl" | "en") {
+function mailFooterHtml(client: ClientMailSecrets, persona: SenderPersona, language: EmailLanguage) {
   const lines = senderFooterLines(client, persona, language);
   if (!lines.length) return "";
-  const label = language === "pl" ? "Dane nadawcy z kampanii" : "Campaign sender details";
+  const label = FOOTER_COPY[language].header;
   return `<div style="margin-top:24px;padding-top:14px;border-top:1px solid #e5e7eb;font-size:12px;color:#667085;line-height:1.55;"><p style="margin:0 0 8px;font-weight:700;color:#475467;">${label}</p>${textToHtml(lines.join("\n"))}</div>`;
 }
 
-export function buildLeadEmailText(args: { body: string; persona: SenderPersona; client: ClientMailSecrets; to: string; campaign?: Campaign | null }) {
-  const language = languageForCampaignLocation(args.campaign?.location_scope, args.campaign?.target_locations);
+export function buildLeadEmailText(args: { body: string; persona: SenderPersona; client: ClientMailSecrets; to: string; campaign?: Campaign | null; language?: EmailLanguage; recipientLocation?: string | null }) {
+  const language = args.language || emailLanguageForCampaignLocation(args.campaign?.location_scope, args.campaign?.target_locations, args.recipientLocation);
   return `${args.body.trim()}${buildEmailSignatureText(args.persona)}${mailFooter(args.client, args.persona, language)}`;
 }
 
-export function buildLeadEmailHtml(args: { body: string; persona: SenderPersona; client: ClientMailSecrets; to: string; trackingId?: string | null; campaign?: Campaign | null }) {
+export function buildLeadEmailHtml(args: { body: string; persona: SenderPersona; client: ClientMailSecrets; to: string; trackingId?: string | null; campaign?: Campaign | null; language?: EmailLanguage; recipientLocation?: string | null }) {
   // Minimal HTML preview only. Real SMTP sending uses plain text, so recipients get a raw email without styled HTML templates.
   return htmlEscape(buildLeadEmailText(args)).replace(/\n/g, "<br />");
 }
 
-export async function sendLeadEmail({ client, to, subject, body, campaign, attachments = [], trackingId }: SendMailArgs) {
+export async function sendLeadEmail({ client, to, subject, body, campaign, language, recipientLocation, attachments = [], trackingId }: SendMailArgs) {
   const host = clean(client.smtp_host) || (await getActiveSecret("smtp_host"));
   const portRaw = client.smtp_port || Number(await getActiveSecret("smtp_port")) || 465;
   const port = Number(portRaw);
@@ -253,7 +277,7 @@ export async function sendLeadEmail({ client, to, subject, body, campaign, attac
       "X-FluxBase-Client-ID": client.id || "",
       "X-FluxBase-Campaign-ID": campaign?.id || "",
     },
-    text: buildLeadEmailText({ body, persona, client, to, campaign }),
+    text: buildLeadEmailText({ body, persona, client, to, campaign, language, recipientLocation }),
     attachments: attachments.map((attachment) => ({
       filename: attachment.file_name,
       content: Buffer.from(attachment.file_data_base64, "base64"),

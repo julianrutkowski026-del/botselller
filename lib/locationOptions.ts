@@ -88,6 +88,103 @@ export const EUROPE_COUNTRY_NAMES_FOR_EUROPE_PLAN = Object.keys(EUROPE_COUNTRIES
 export const EUROPE_LOCATIONS = Array.from(new Set(Object.values(EUROPE_COUNTRIES).flat()));
 export const EUROPE_LOCATIONS_WITHOUT_POLAND = Array.from(new Set(Object.values(EUROPE_COUNTRIES_WITHOUT_POLAND).flat()));
 
+export const EMAIL_LANGUAGE_NAMES = {
+  pl: "polski",
+  en: "angielski",
+  de: "niemiecki",
+  fr: "francuski",
+  es: "hiszpański",
+  it: "włoski",
+  nl: "niderlandzki",
+  pt: "portugalski",
+  cs: "czeski",
+  sk: "słowacki",
+  da: "duński",
+  sv: "szwedzki",
+  no: "norweski",
+  fi: "fiński",
+  ro: "rumuński",
+  hu: "węgierski",
+  el: "grecki",
+  uk: "ukraiński",
+} as const;
+
+export type EmailLanguage = keyof typeof EMAIL_LANGUAGE_NAMES;
+
+const COUNTRY_LANGUAGE_ALIASES: Array<[EmailLanguage, string[]]> = [
+  ["pl", ["polska", "poland"]],
+  ["de", ["niemcy", "germany", "austria", "österreich", "switzerland", "schweiz", "suisse", "liechtenstein"]],
+  ["fr", ["francja", "france", "belgium", "belgia", "luxembourg", "luksemburg", "monaco"]],
+  ["es", ["hiszpania", "spain"]],
+  ["it", ["włochy", "italy", "san marino"]],
+  ["nl", ["holandia", "netherlands", "the netherlands"]],
+  ["pt", ["portugalia", "portugal"]],
+  ["cs", ["czechy", "czechia", "czech republic"]],
+  ["sk", ["słowacja", "slovakia"]],
+  ["da", ["dania", "denmark"]],
+  ["sv", ["szwecja", "sweden"]],
+  ["no", ["norwegia", "norway"]],
+  ["fi", ["finlandia", "finland"]],
+  ["ro", ["rumunia", "romania", "mołdawia", "moldova"]],
+  ["hu", ["węgry", "hungary"]],
+  ["el", ["grecja", "greece", "cypr", "cyprus"]],
+  ["uk", ["ukraina", "ukraine"]],
+  ["en", ["wielka brytania", "united kingdom", "great britain", "ireland", "irlandia"]],
+];
+
+function normalizedGeoText(value: string | null | undefined) {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function languageFromCountryText(value: string | null | undefined): EmailLanguage | null {
+  const normalized = normalizedGeoText(value);
+  if (!normalized) return null;
+
+  // Belgium and Switzerland use several official languages; choose from the target city when possible.
+  if (/(^| )(belgia|belgium)( |$)/.test(normalized)) {
+    if (/(^| )(antwerp|antwerpen|ghent|gent|bruges|brugge|leuven|mechelen|hasselt)( |$)/.test(normalized)) return "nl";
+    return "fr";
+  }
+  if (/(^| )(szwajcaria|switzerland|schweiz|suisse)( |$)/.test(normalized)) {
+    if (/(^| )(geneva|geneve|lausanne|fribourg|neuchatel)( |$)/.test(normalized)) return "fr";
+    if (/(^| )(lugano|bellinzona|locarno)( |$)/.test(normalized)) return "it";
+    return "de";
+  }
+
+  const matches = COUNTRY_LANGUAGE_ALIASES
+    .flatMap(([language, aliases]) => aliases.map((alias) => ({ language, alias: normalizedGeoText(alias) })))
+    .filter(({ alias }) => ` ${normalized} `.includes(` ${alias} `))
+    .sort((a, b) => b.alias.length - a.alias.length);
+  return matches[0]?.language || null;
+}
+
+function languageForSelectedLocations(locations: string[] | null | undefined, placeCity?: string | null) {
+  const list = (locations || []).map((item) => item.trim()).filter(Boolean);
+  if (!list.length) return null;
+
+  const city = normalizedGeoText(placeCity);
+  if (city) {
+    const matchingLocation = list.find((location) => {
+      const normalized = normalizedGeoText(location);
+      const cityPart = normalized.split(" ").slice(0, city.split(" ").length).join(" ");
+      return normalized === city || cityPart === city;
+    });
+    if (matchingLocation) {
+      const citySpecific = languageFromCountryText(matchingLocation);
+      if (citySpecific) return citySpecific;
+    }
+  }
+
+  const languages = Array.from(new Set(list.map(languageFromCountryText).filter((value): value is EmailLanguage => Boolean(value))));
+  return languages.length === 1 ? languages[0] : null;
+}
+
 const POLAND_LOCATION_SET = new Set([
   ...POLAND_LOCATIONS.map((city) => city.toLowerCase()),
   ...POLAND_LOCATIONS.map((city) => `${city}, poland`.toLowerCase()),
@@ -106,12 +203,21 @@ export function languageForLocation(value: string | null | undefined): "pl" | "e
   return isPolishLocation(value) ? "pl" : "en";
 }
 
-export function languageForCampaignLocation(scope: string | null | undefined, locations: string[] | null | undefined, placeCity?: string | null): "pl" | "en" {
+export function emailLanguageForCampaignLocation(
+  scope: string | null | undefined,
+  locations: string[] | null | undefined,
+  placeCity?: string | null,
+  placeAddress?: string | null,
+): EmailLanguage {
+  const placeLanguage = languageFromCountryText(placeAddress) || languageFromCountryText(placeCity);
+  if (placeLanguage) return placeLanguage;
   if (scope === "poland" || scope === "voivodeship") return "pl";
   if (placeCity && isPolishLocation(placeCity)) return "pl";
-  const list = (locations || []).map((item) => item.trim()).filter(Boolean);
-  if (list.length && list.every(isPolishLocation)) return "pl";
-  return "en";
+  return languageForSelectedLocations(locations, placeCity) || "en";
+}
+
+export function languageForCampaignLocation(scope: string | null | undefined, locations: string[] | null | undefined, placeCity?: string | null): "pl" | "en" {
+  return emailLanguageForCampaignLocation(scope, locations, placeCity) === "pl" ? "pl" : "en";
 }
 
 export function normalizeLocationLabel(value: string) {

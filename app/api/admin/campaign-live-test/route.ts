@@ -149,8 +149,8 @@ export async function POST(request: Request) {
         generated: {
           subject: generated.subject,
           body: generated.body,
-          text: buildLeadEmailText({ body: generated.body, persona, client: campaign.client_accounts, to: emailResult.email, campaign }),
-          html: buildLeadEmailHtml({ body: generated.body, persona, client: campaign.client_accounts, to: emailResult.email, campaign }),
+          text: buildLeadEmailText({ body: generated.body, persona, client: campaign.client_accounts, to: emailResult.email, campaign, language: generated.language, recipientLocation: place.address || place.city }),
+          html: buildLeadEmailHtml({ body: generated.body, persona, client: campaign.client_accounts, to: emailResult.email, campaign, language: generated.language, recipientLocation: place.address || place.city }),
         },
         attempts,
       }, { headers });

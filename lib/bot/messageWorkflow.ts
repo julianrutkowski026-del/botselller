@@ -9,7 +9,7 @@ import { addGlobalSuppressionForMessage } from "@/lib/bot/suppression";
 import { assertCanSendNow, getSendCapacity, isSendLimitError, requiredCampaignNumber, requiredCampaignTimeZone, SendLimitError } from "@/lib/bot/sendSafety";
 import { addCalendarDaysSkippingWeekend, isWeekendInTimeZone, nextBusinessDayAtHour } from "@/lib/bot/businessDays";
 import { domainKey } from "@/lib/bot/utils";
-import { languageForCampaignLocation } from "@/lib/locationOptions";
+import { emailLanguageForCampaignLocation } from "@/lib/locationOptions";
 import { adminDb } from "@/lib/supabaseAdmin";
 import type { Campaign, ClientAccount, Lead, MessageStatus } from "@/lib/types";
 
@@ -258,30 +258,38 @@ async function loadMessage(messageId: string) {
   return data;
 }
 
-function followUpSubject(subject: string | null) {
-  const clean = subject?.trim() || "Krótka wiadomość";
+function followUpSubject(subject: string | null, language: ReturnType<typeof emailLanguageForCampaignLocation>) {
+  const subjectFallback: Record<string, string> = { pl: "Krótka wiadomość", en: "A short message", de: "Kurze Nachricht", fr: "Bref message", es: "Mensaje breve", it: "Messaggio breve", nl: "Kort bericht", pt: "Mensagem breve", cs: "Krátká zpráva", sk: "Krátka správa", da: "Kort besked", sv: "Kort meddelande", no: "Kort melding", fi: "Lyhyt viesti", ro: "Mesaj scurt", hu: "Rövid üzenet", el: "Σύντομο μήνυμα", uk: "Коротке повідомлення" };
+  const clean = subject?.trim() || subjectFallback[language] || subjectFallback.en;
   return /^re:/i.test(clean) ? clean : `Re: ${clean}`;
 }
 
 function followUpBody(message: WorkflowMessage) {
-  const language = languageForCampaignLocation(message.campaigns?.location_scope, message.campaigns?.target_locations, message.leads?.city);
-  const company = message.leads?.company_name || (language === "pl" ? "Państwa firmy" : "your company");
-  if (language === "en") {
-    const cta = message.campaigns?.call_to_action || "Would it make sense for me to send over a short note or schedule a quick call?";
-    return [
-      "Hello,",
-      `I wanted to briefly follow up on my previous message regarding ${company}.`,
-      "I do not want to overload your inbox, so I only wanted to ask whether this topic is relevant for you at the moment.",
-      cta,
-    ].join("\n\n");
-  }
-  const cta = message.campaigns?.call_to_action || "Czy możemy przesłać krótkie informacje albo umówić krótką rozmowę?";
-  return [
-    "Dzień dobry,",
-    `wracam krótko do poprzedniej wiadomości dotyczącej ${company}.`,
-    "Nie chcę zasypywać skrzynki, dlatego tylko dopytam, czy temat jest dla Państwa aktualny.",
-    cta,
-  ].join("\n\n");
+  const language = emailLanguageForCampaignLocation(message.campaigns?.location_scope, message.campaigns?.target_locations, message.leads?.city);
+  const companyFallback: Record<string, string> = { pl: "Państwa firmy", en: "your company", de: "Ihres Unternehmens", fr: "votre entreprise", es: "su empresa", it: "la vostra azienda", nl: "uw bedrijf", pt: "a vossa empresa", cs: "vaší společnosti", sk: "vašej spoločnosti", da: "jeres virksomhed", sv: "ert företag", no: "bedriften deres", fi: "yrityksestänne", ro: "compania dumneavoastră", hu: "az Önök vállalata", el: "της εταιρείας σας", uk: "вашої компанії" };
+  const company = message.leads?.company_name || companyFallback[language] || companyFallback.en;
+  const copy: Record<string, { greeting: string; followUp: string; gentle: string; question: string }> = {
+    pl: { greeting: "Dzień dobry,", followUp: `wracam krótko do poprzedniej wiadomości dotyczącej ${company}.`, gentle: "Nie chcę zasypywać skrzynki, dlatego tylko dopytam, czy temat jest dla Państwa aktualny.", question: "Czy krótka rozmowa byłaby dla Państwa pomocna?" },
+    en: { greeting: "Hello,", followUp: `I wanted to briefly follow up on my previous message regarding ${company}.`, gentle: "I do not want to overload your inbox, so I only wanted to ask whether this topic is relevant to you at the moment.", question: "Would a brief conversation be useful?" },
+    de: { greeting: "Guten Tag,", followUp: `ich wollte kurz auf meine vorherige Nachricht zu ${company} zurückkommen.`, gentle: "Ich möchte Ihren Posteingang nicht unnötig belasten und wollte nur fragen, ob das Thema für Sie derzeit relevant ist.", question: "Wäre ein kurzes Gespräch für Sie hilfreich?" },
+    fr: { greeting: "Bonjour,", followUp: `je me permets de revenir brièvement sur mon précédent message concernant ${company}.`, gentle: "Je ne souhaite pas encombrer votre boîte de réception et voulais simplement savoir si ce sujet est d’actualité pour vous.", question: "Un bref échange vous serait-il utile ?" },
+    es: { greeting: "Buenos días,", followUp: `quería retomar brevemente mi mensaje anterior sobre ${company}.`, gentle: "No quiero llenar su bandeja de entrada; solo quería preguntar si este tema es relevante para ustedes en este momento.", question: "¿Les resultaría útil una breve conversación?" },
+    it: { greeting: "Buongiorno,", followUp: `volevo riprendere brevemente il mio messaggio precedente riguardo a ${company}.`, gentle: "Non vorrei appesantire la vostra casella di posta; volevo solo chiedervi se l’argomento è attuale per voi.", question: "Potrebbe esservi utile una breve conversazione?" },
+    nl: { greeting: "Goedendag,", followUp: `ik kom graag kort terug op mijn eerdere bericht over ${company}.`, gentle: "Ik wil uw inbox niet onnodig belasten en wilde alleen vragen of dit onderwerp op dit moment relevant voor u is.", question: "Zou een kort gesprek u helpen?" },
+    pt: { greeting: "Bom dia,", followUp: `gostaria de retomar brevemente a minha mensagem anterior sobre ${company}.`, gentle: "Não quero sobrecarregar a sua caixa de entrada; queria apenas perguntar se este tema é relevante neste momento.", question: "Uma breve conversa seria útil?" },
+    cs: { greeting: "Dobrý den,", followUp: `rád bych krátce navázal na svou předchozí zprávu týkající se společnosti ${company}.`, gentle: "Nechci zahlcovat vaši schránku, proto se jen zeptám, zda je toto téma pro vás aktuální.", question: "Byl by pro vás krátký rozhovor užitečný?" },
+    sk: { greeting: "Dobrý deň,", followUp: `rád by som stručne nadviazal na svoju predchádzajúcu správu týkajúcu sa spoločnosti ${company}.`, gentle: "Nechcem zahltiť vašu schránku, preto sa len opýtam, či je táto téma pre vás aktuálna.", question: "Bol by pre vás krátky rozhovor užitočný?" },
+    da: { greeting: "Goddag,", followUp: `jeg vil kort følge op på min tidligere besked om ${company}.`, gentle: "Jeg vil ikke fylde unødigt i din indbakke og ville blot høre, om emnet er relevant for jer lige nu.", question: "Ville en kort samtale være nyttig?" },
+    sv: { greeting: "Hej,", followUp: `jag ville kort följa upp mitt tidigare meddelande om ${company}.`, gentle: "Jag vill inte belasta er inkorg i onödan och ville bara fråga om ämnet är aktuellt för er just nu.", question: "Skulle ett kort samtal vara till hjälp?" },
+    no: { greeting: "Hei,", followUp: `jeg ville kort følge opp den forrige meldingen min om ${company}.`, gentle: "Jeg vil ikke fylle innboksen deres unødvendig, og ville bare høre om dette temaet er aktuelt for dere nå.", question: "Ville en kort samtale vært nyttig?" },
+    fi: { greeting: "Hei,", followUp: `halusin palata lyhyesti aiempaan viestiini, joka koski yritystä ${company}.`, gentle: "En halua kuormittaa sähköpostilaatikkoanne, joten kysyn vain, onko aihe teille ajankohtainen.", question: "Olisiko lyhyt keskustelu hyödyllinen?" },
+    ro: { greeting: "Bună ziua,", followUp: `revin pe scurt la mesajul meu anterior despre ${company}.`, gentle: "Nu doresc să vă aglomerez căsuța de e-mail și voiam doar să întreb dacă subiectul este relevant pentru dumneavoastră acum.", question: "V-ar fi utilă o scurtă discuție?" },
+    hu: { greeting: "Jó napot kívánok!", followUp: `röviden szeretnék visszatérni a ${company} kapcsán küldött előző üzenetemre.`, gentle: "Nem szeretném feleslegesen terhelni a postaládáját; csak azt szeretném megkérdezni, aktuális-e most Önöknek ez a téma.", question: "Hasznos lenne egy rövid beszélgetés?" },
+    el: { greeting: "Καλημέρα σας,", followUp: `θα ήθελα να επανέλθω σύντομα στο προηγούμενο μήνυμά μου σχετικά με την εταιρεία ${company}.`, gentle: "Δεν θέλω να επιβαρύνω τα εισερχόμενά σας και θα ήθελα μόνο να ρωτήσω αν το θέμα είναι επίκαιρο για εσάς.", question: "Θα σας ήταν χρήσιμη μια σύντομη συζήτηση;" },
+    uk: { greeting: "Добрий день,", followUp: `хотів би коротко повернутися до попереднього повідомлення щодо компанії ${company}.`, gentle: "Не хочу перевантажувати вашу поштову скриньку, тому лише запитаю, чи актуальна для вас ця тема зараз.", question: "Чи була б вам корисною коротка розмова?" },
+  };
+  const localized = copy[language] || copy.en;
+  return [localized.greeting, localized.followUp, localized.gentle, localized.question].join("\n\n");
 }
 
 function scheduledFollowUpAt(message: WorkflowMessage) {
@@ -339,6 +347,7 @@ export async function sendMessageById(messageId: string, options: { force?: bool
       body: message.body || "",
       campaignName: message.campaigns?.name,
       campaign: message.campaigns || null,
+      recipientLocation: message.leads?.city,
       attachments,
       trackingId,
     });
@@ -502,7 +511,7 @@ export async function processDueFollowUps(limit = 20) {
           status: "pending",
           tracking_id: crypto.randomUUID(),
           email_to: recipient,
-          subject: followUpSubject(parent.subject),
+          subject: followUpSubject(parent.subject, emailLanguageForCampaignLocation(parent.campaigns?.location_scope, parent.campaigns?.target_locations, parent.leads?.city)),
           body: followUpBody(parent),
           lead_payload: {
             company_name: parent.leads?.company_name || "Lead",
