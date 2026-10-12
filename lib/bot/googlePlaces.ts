@@ -12,6 +12,15 @@ export type PlaceLead = {
   types: string[];
 };
 
+export function isGooglePlacesAccessBlocked(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /requests to this api .* (?:are )?blocked|api key .* not authorized|not authorized to use (?:this )?api/i.test(message);
+}
+
+export function googlePlacesAccessHelp() {
+  return "Sprawdź w Google Cloud, czy Places API (New) jest włączone w projekcie przypisanym do tego klucza, projekt ma aktywne rozliczenia, a ograniczenia klucza dopuszczają serwerowe wywołania Places API (New). Klucz produkcyjny musi pochodzić z tego samego projektu.";
+}
+
 function cityFromAddress(address: string | undefined, fallback: string) {
   if (!address) return fallback;
   const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
@@ -55,7 +64,9 @@ export async function searchGooglePlaces(args: {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = payload?.error?.message || "Google Places zwróciło błąd.";
-    throw new Error(message);
+    const apiStatus = payload?.error?.status;
+    const code = payload?.error?.code || response.status;
+    throw new Error(`${message} (Google Places ${apiStatus || code}).`);
   }
 
   return (payload?.places || [])

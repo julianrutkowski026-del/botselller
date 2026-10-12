@@ -6,7 +6,7 @@ import { generateLeadWithAi } from "@/lib/bot/aiLead";
 import { isWeekendInTimeZone, nextBusinessDayAtHour } from "@/lib/bot/businessDays";
 import { findBusinessEmail } from "@/lib/bot/emailFinder";
 import { isValidRecipientEmail, normalizeEmailCandidate } from "@/lib/bot/emailValidation";
-import { searchGooglePlaces, type PlaceLead } from "@/lib/bot/googlePlaces";
+import { googlePlacesAccessHelp, isGooglePlacesAccessBlocked, searchGooglePlaces, type PlaceLead } from "@/lib/bot/googlePlaces";
 import { expandCampaignLocations, languageForLocation } from "@/lib/bot/locationPresets";
 import { getSendCapacity } from "@/lib/bot/sendSafety";
 import { domainKey, toList, unique } from "@/lib/bot/utils";
@@ -1159,6 +1159,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
     });
 
     let slotIndex = 0;
+    let placesAccessBlocked = false;
     for (const pair of searchPairs) {
       if (stats.queuedEmails >= availableToday) break;
       if (Date.now() >= searchDeadlineMs) {
@@ -1176,9 +1177,18 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
         places = await searchGooglePlaces({ apiKey: secrets.googlePlaces, industry, location, limit: perQueryLimit, languageCode: languageForLocation(location) });
         stats.foundPlaces += places.length;
       } catch (error) {
-        const message = `${industry} ${location}: ${errorMessage(error, "błąd Google Places")}`;
+        const blocked = isGooglePlacesAccessBlocked(error);
+        const message = blocked
+          ? `Google Places odrzuciło dostęp: ${errorMessage(error, "błąd uprawnień API")}. ${googlePlacesAccessHelp()}`
+          : `${industry} ${location}: ${errorMessage(error, "błąd Google Places")}`;
         stats.errors.push(message);
         await logRun({ runId, campaign, level: "error", stage: "places", message });
+        if (blocked) {
+          // Błąd uprawnień jest wspólny dla wszystkich zapytań. Nie próbuj każdej lokalizacji
+          // osobno ani nie uruchamiaj szybkiej pętli ponowień dla kampanii.
+          placesAccessBlocked = true;
+          break;
+        }
         continue;
       }
 
@@ -1310,7 +1320,9 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
     const plannedNextRunAt = (await dynamicScheduleForCampaign(campaign, { strictlyAfter: true })).nextRunAt;
     const retryMinutesRaw = Number(process.env.UNDER_TARGET_RETRY_MINUTES || 3);
     const retryMinutes = Math.min(Math.max(Number.isFinite(retryMinutesRaw) ? retryMinutesRaw : 3, 1), 60);
-    const nextRunAt = underTarget && stats.queuedEmails === 0
+    const nextRunAt = placesAccessBlocked
+      ? plannedNextRunAt
+      : underTarget && stats.queuedEmails === 0
       ? new Date(Date.now() + retryMinutes * 60_000).toISOString()
       : plannedNextRunAt;
     await db.from("campaigns").update({
