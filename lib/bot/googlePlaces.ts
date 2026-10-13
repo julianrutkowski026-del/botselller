@@ -1,5 +1,8 @@
 import "server-only";
 
+import { localizeSportsSearchTerm } from "@/lib/bot/sportsBuyerTarget";
+import type { EmailLanguage } from "@/lib/locationOptions";
+
 export type PlaceLead = {
   companyName: string;
   industry: string | null;
@@ -35,7 +38,7 @@ export async function searchGooglePlaces(args: {
   industry: string;
   location: string;
   limit: number;
-  languageCode?: "pl" | "en";
+  languageCode?: EmailLanguage;
 }): Promise<PlaceLead[]> {
   const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
@@ -55,7 +58,7 @@ export async function searchGooglePlaces(args: {
       ].join(","),
     },
     body: JSON.stringify({
-      textQuery: `${args.industry} ${args.location}`,
+      textQuery: `${localizeSportsSearchTerm(args.industry, args.languageCode)} ${args.location}`,
       languageCode: args.languageCode || "pl",
       maxResultCount: Math.min(Math.max(args.limit, 1), 20),
     }),

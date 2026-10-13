@@ -199,8 +199,8 @@ export function isPolishLocation(value: string | null | undefined) {
   return POLAND_LOCATION_SET.has(normalized);
 }
 
-export function languageForLocation(value: string | null | undefined): "pl" | "en" {
-  return isPolishLocation(value) ? "pl" : "en";
+export function languageForLocation(value: string | null | undefined): EmailLanguage {
+  return languageFromCountryText(value) || (isPolishLocation(value) ? "pl" : "en");
 }
 
 export function emailLanguageForCampaignLocation(

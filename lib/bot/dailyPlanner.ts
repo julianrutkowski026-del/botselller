@@ -9,6 +9,12 @@ import { isValidRecipientEmail, normalizeEmailCandidate } from "@/lib/bot/emailV
 import { googlePlacesAccessHelp, isGooglePlacesAccessBlocked, searchGooglePlaces, type PlaceLead } from "@/lib/bot/googlePlaces";
 import { expandCampaignLocations, languageForLocation } from "@/lib/bot/locationPresets";
 import { getSendCapacity } from "@/lib/bot/sendSafety";
+import {
+  isSportsOrganizationOnlyTarget,
+  matchesSportsOrganizationTarget,
+  sportsOrganizationAliases,
+  sportsOrganizationSearchTerms,
+} from "@/lib/bot/sportsBuyerTarget";
 import { domainKey, toList, unique } from "@/lib/bot/utils";
 import { auditWebsite } from "@/lib/bot/websiteAudit";
 import { decryptSecret } from "@/lib/cryptoSecrets";
@@ -736,7 +742,8 @@ function phraseLooksUnsafeForPlacesSearch(phrase: string, fullCampaignTarget: st
     "odziez", "odziezy", "sport", "sportowe", "sportowa", "sportowy",
     "klub", "kluby", "klubow", "akademia", "akademie", "akademii", "organizacja", "organizacje", "organizacji",
     "stowarzyszenie", "fundacja", "zwiazek", "marka", "marki", "marek", "brand",
-    "szkola", "szkoly", "szkolka", "szkolki",
+    "szkola", "szkoly", "szkolka", "szkolki", "wydarzenie", "wydarzenia", "event", "events", "veranstaltung", "veranstaltungen",
+    "agencja", "agencje", "agentur", "organizator", "organizatorzy",
   ]);
   if (broadSingleTerms.has(normalized)) return true;
   if (words.length > 6) return true;
@@ -764,6 +771,15 @@ function campaignTargetSource(campaign: CampaignWithClient) {
     campaign.must_have_signals,
     campaign.required_online_signals,
     campaign.lead_qualification_rules,
+  ].filter(Boolean).join("\n");
+}
+
+function campaignPrimaryTargetSource(campaign: CampaignWithClient) {
+  return [
+    campaign.search_keywords,
+    ...(campaign.target_industries || []),
+    campaign.exact_target_business_type,
+    campaign.target_audience_niche,
   ].filter(Boolean).join("\n");
 }
 
@@ -840,6 +856,8 @@ function extractCampaignDrivenSearchTerms(source: string) {
 function campaignSearchTerms(campaign: CampaignWithClient) {
   // Kampania jest jedynym źródłem prawdy. Nie dokładamy „modelu biznesu”, presetów ani fraz z oferty klienta.
   // Jeżeli admin wpisał pole „Słowa kluczowe do wyszukiwania”, używamy najpierw tylko tego pola.
+  const primaryTarget = campaignPrimaryTargetSource(campaign);
+  if (isSportsOrganizationOnlyTarget(primaryTarget)) return sportsOrganizationSearchTerms(primaryTarget);
   const explicit = enrichSportsSearchTerms(campaign, extractCampaignDrivenSearchTerms(explicitSearchSource(campaign)));
   if (explicit.length) return explicit;
 
@@ -870,9 +888,11 @@ function campaignTargetDebugText(campaign: CampaignWithClient, searchTerms: stri
 function targetEntityAliases(campaign: CampaignWithClient) {
   const source = campaignTargetSource(campaign);
   const normalized = normalizeForTarget(source);
+  const primaryTarget = campaignPrimaryTargetSource(campaign);
+  if (isSportsOrganizationOnlyTarget(primaryTarget)) return sportsOrganizationAliases(primaryTarget);
   const aliases: string[] = [];
-  if (/\bklub/.test(normalized)) aliases.push("klub", "klub sportowy", "uks", "lks", "mks", "ks ");
-  if (/\bakadem/.test(normalized)) aliases.push("akademia", "akademia sportowa", "akademia piłkarska");
+  if (/\bklub\w*/.test(normalized)) aliases.push("klub", "klub sportowy", "uks", "lks", "mks", "ks ");
+  if (/\bakadem\w*/.test(normalized)) aliases.push("akademia", "akademia sportowa", "akademia piłkarska");
   if (/\bszkolka/.test(normalized) && /\b(pilk|futbol|football|sport)/.test(normalized)) aliases.push("szkółka piłkarska", "szkółka sportowa");
   if (/\bszkol/.test(normalized)) aliases.push("szkoła", "liceum", "technikum");
   if (/\borganizac/.test(normalized)) aliases.push("organizacja", "organizacja sportowa");
@@ -885,7 +905,8 @@ function targetEntityAliases(campaign: CampaignWithClient) {
 
 function campaignHasSportsClubTarget(campaign: CampaignWithClient) {
   const normalized = normalizeForTarget(campaignTargetSource(campaign));
-  return /\b(klub|akadem|szkolka|szkol|uks|lks|mks|organizac|stowarzysz|fundac|zwiazek|mark)\b/.test(normalized) && /\b(sport|pilk|futbol|football|siatkow|koszyk|reczn|walk|fitness|silown)\b/.test(normalized);
+  return /\b(klub\w*|akadem\w*|druzyn\w*|team\w*|szkolka\w*|szkol\w*|uks|lks|mks|organizac\w*|stowarzysz\w*|fundac\w*|zwiazek\w*|mark\w*)\b/.test(normalized)
+    && /\b(sport\w*|pilk\w*|futbol\w*|football\w*|fussball\w*|siatkow\w*|koszyk\w*|reczn\w*|walk\w*|fitness\w*|silown\w*)\b/.test(normalized);
 }
 
 function sportsDisciplinesFromCampaign(campaign: CampaignWithClient) {
@@ -903,8 +924,11 @@ function sportsDisciplinesFromCampaign(campaign: CampaignWithClient) {
 }
 
 function enrichSportsSearchTerms(campaign: CampaignWithClient, terms: string[]) {
+  const targetSource = campaignTargetSource(campaign);
+  const primaryTarget = campaignPrimaryTargetSource(campaign);
+  if (isSportsOrganizationOnlyTarget(primaryTarget)) return sportsOrganizationSearchTerms(primaryTarget);
   if (!campaignHasSportsClubTarget(campaign)) return terms;
-  const source = campaignTargetSource(campaign);
+  const source = targetSource;
   const normalized = normalizeForTarget(source);
   const disciplines = sportsDisciplinesFromCampaign(campaign);
   const enriched: string[] = [...terms];
@@ -970,9 +994,15 @@ function shouldSkipPlaceByPositiveTarget(campaign: CampaignWithClient, place: Pl
     if (botanicalMatch) return { skip: true as const, reason: `wygląda jak ogrodnictwo/szkółka roślin, nie target sportowy: ${botanicalMatch}` };
 
     const matchedAlias = aliases.some((alias) => alias && haystack.includes(alias));
-    const sportsSignal = /\b(sport|pilk|futbol|football|siatkow|koszyk|reczn|walk|tenis|fitness|silown|uks|lks|mks)\b/.test(haystack);
-    // Dla kampanii sportowych Places musi wyglądać jak klub/akademia/szkoła/organizacja/marka sportowa już na poziomie nazwy/typu.
-    if (!matchedAlias && !sportsSignal) return { skip: true as const, reason: "nie wygląda jak klub, akademia, szkoła, marka albo organizacja sportowa z kampanii" };
+    const sportsSignal = /\b(sport\w*|pilk\w*|futbol\w*|football\w*|fussball\w*|siatkow\w*|koszyk\w*|reczn\w*|walk\w*|tenis\w*|fitness\w*|silown\w*|uks|lks|mks)\b/.test(haystack);
+    if (isSportsOrganizationOnlyTarget(campaignPrimaryTargetSource(campaign))) {
+      if (!matchesSportsOrganizationTarget(campaignPrimaryTargetSource(campaign), haystack)) {
+        return { skip: true as const, reason: "nie jest bezpośrednio klubem, akademią ani drużyną sportową" };
+      }
+    } else if (!matchedAlias || !sportsSignal) {
+      // Dla kampanii sportowych sam sygnał sportu lub podobny alias nie wystarczy; musi zgadzać się i typ organizacji, i sport.
+      return { skip: true as const, reason: "nie wygląda jak organizacja sportowa z docelowej kategorii kampanii" };
+    }
   }
 
   return { skip: false as const, reason: null };

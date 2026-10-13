@@ -5,6 +5,7 @@ import type { WebsiteAudit } from "@/lib/bot/websiteAudit";
 import type { PlaceLead } from "@/lib/bot/googlePlaces";
 import { EMAIL_LANGUAGE_NAMES, emailLanguageForCampaignLocation, type EmailLanguage } from "@/lib/locationOptions";
 import { logAiUsage, readOpenAiUsage } from "@/lib/aiUsage";
+import { isSportsOrganizationOnlyTarget } from "@/lib/bot/sportsBuyerTarget";
 
 export type GeneratedLeadResult = {
   score: number;
@@ -179,6 +180,15 @@ export async function generateLeadWithAi(args: {
   const messageLanguage = emailLanguageForCampaignLocation(args.campaign.location_scope, args.campaign.target_locations, args.place.city, args.place.address);
   const languageName = EMAIL_LANGUAGE_NAMES[messageLanguage];
   const languageInstruction = `Napisz całą wiadomość w języku ${languageName}. Dotyczy to tematu, treści, powodu kontaktu i podsumowania AI.`;
+  const primaryTarget = [
+    args.campaign.search_keywords,
+    ...(args.campaign.target_industries || []),
+    args.campaign.exact_target_business_type,
+    args.campaign.target_audience_niche,
+  ].filter(Boolean).join("\n");
+  const sportsBuyerInstruction = isSportsOrganizationOnlyTarget(primaryTarget)
+    ? `\nTWARDY FILTR KAMPANII: szukamy wyłącznie klubów sportowych, akademii sportowych i drużyn sportowych. Lead musi być takim zespołem lub organizacją, która może zamawiać stroje dla własnych zawodników. Agencja eventowa, sala koncertowa, centrum konferencyjne, hotel, firma kupująca ubrania dla pracowników ani organizator wydarzeń bez własnej drużyny sportowej nie pasują: wystaw score 0-2 i nie pisz do nich oferty. Wiadomość ma dotyczyć strojów meczowych/treningowych dla zawodników, nie ubrań na event lub merchu.`
+    : "";
 
   const prompt = `
 Jesteś AI Sales Managerem. Przygotowujesz lead dla klienta abonamentowego FluxBase BotSeller.
@@ -239,6 +249,7 @@ Audyt automatyczny strony:
 - Próbka treści: ${args.audit.textSample.slice(0, 900)}
 
 Zadanie:
+${sportsBuyerInstruction}
 1. Oceń jakość leada od 0 do 10 dla tej kampanii. Źródłem prawdy jest wyłącznie opis targetu wpisany w kampanii: „Szukane branże”, „Jakich firm szukamy”, „Konkretny typ firm”, „Nisza”, „Słowa kluczowe”, „Sygnały wymagane”, „Zasady kwalifikacji” i „Wykluczenia”.
 2. NIE MYL klienta z targetem. „Czym zajmuje się klient”, „Oferta klienta” i „Promowana usługa” opisują NADAWCĘ oraz produkt, a nie firmy, których bot ma szukać.
 3. Jeśli kampania szuka klubów, akademii, szkół, marek lub organizacji sportowych, lead musi wyglądać jak taki kupujący. Szkółka drzew/krzewów/roślin, centrum ogrodnicze, gospodarstwo szkółkarskie, sklep sportowy, hurtownia, drukarnia, szwalnia albo producent odzieży ma dostać score 0-2, chyba że kampania literalnie wskazuje taki typ jako target.

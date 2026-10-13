@@ -260,15 +260,15 @@ function CampaignProgrammingFields({ form, setForm }: { form: typeof initialCamp
         label="Jakich firm szukamy?"
         value={form.target_industries}
         onChange={(value) => setForm({ ...form, target_industries: value, target_audience_niche: value, exact_target_business_type: value, search_keywords: value })}
-        placeholder="Np. kluby sportowe, akademie piłkarskie, szkoły, organizacje sportowe"
-        help="Najważniejsze pole. Wpisz wyłącznie potencjalnych kupujących, np. kluby sportowe, akademie piłkarskie, szkoły. Nie wpisuj tu tego, co sprzedajesz, np. odzież sportowa albo koszulki."
+        placeholder="Np. kluby sportowe, akademie sportowe, drużyny sportowe"
+        help="Podaj konkretne typy kupujących, oddzielone przecinkami. Nie dopisuj tu agencji eventowych, obiektów, marek ani opisu oferty — te informacje ustawisz w osobnych polach."
         required
         span
       />
       <TextAreaField
         label="Czym zajmują się te firmy?"
         value={form.target_business_activities}
-        onChange={(value) => setForm({ ...form, target_business_activities: value, target_customer_description: value, customer_pain_points: value })}
+        onChange={(value) => setForm({ ...form, target_business_activities: value, target_customer_description: value })}
         placeholder="Np. prowadzą treningi, organizują mecze i kompletują stroje dla drużyn."
         help="To pole pomaga AI ocenić leady i pisać maile. Nie jest już używane jako główne zapytanie Google, żeby bot nie uciekał w złe branże."
         span
@@ -301,9 +301,9 @@ function CampaignProgrammingFields({ form, setForm }: { form: typeof initialCamp
       <TextAreaField
         label="Czego bot ma unikać?"
         value={form.avoid_in_messages}
-        onChange={(value) => setForm({ ...form, avoid_in_messages: value, lead_disqualification_rules: value, excluded_company_types: value })}
-        placeholder="Np. nie pisać agresywnie, nie obiecywać wyników, nie kontaktować sieciówek ani producentów odzieży."
-        help="Opcjonalnie. Zasady bezpieczeństwa i typy firm, których bot ma nie ruszać. Twarde słowa wykluczające możesz dopisać niżej w ustawieniach zaawansowanych."
+        onChange={(value) => setForm({ ...form, avoid_in_messages: value })}
+        placeholder="Np. nie pisać agresywnie ani nie obiecywać niepotwierdzonych warunków."
+        help="To pole dotyczy treści wiadomości. Typy firm do pominięcia i zasady dyskwalifikacji ustaw osobno w polach targetu."
         span
       />
     </>
