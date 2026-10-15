@@ -1192,9 +1192,13 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
 
     let slotIndex = 0;
     let placesAccessBlocked = false;
+    let placesFailedQueries = 0;
+    let searchDeadlineReached = false;
+    let targetRejected = 0;
     searchLoop: for (const pair of searchPairs) {
       if (stats.queuedEmails >= availableToday) break;
       if (Date.now() >= searchDeadlineMs) {
+        searchDeadlineReached = true;
         await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu pojedynczego cyklu minął. Bot nie zawiesza kampanii, tylko zapisuje kursor i wróci do szukania przy następnym ticku crona." });
         break;
       }
@@ -1203,21 +1207,25 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
         break;
       }
       const [industry, location] = pair.split("|||");
-      stats.searchedQueries += 1;
       let places: PlaceLead[] = [];
       try {
         const placesTimeoutMs = Math.min(7000, searchDeadlineMs - Date.now());
         if (placesTimeoutMs < 1000) {
+          searchDeadlineReached = true;
           await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Pozostało za mało czasu na kolejne zapytanie Google Places. Bot wróci do niego przy następnym uruchomieniu." });
           break;
         }
         places = await searchGooglePlaces({ apiKey: secrets.googlePlaces, industry, location, limit: perQueryLimit, languageCode: languageForLocation(location), timeoutMs: placesTimeoutMs });
+        stats.searchedQueries += 1;
         stats.foundPlaces += places.length;
       } catch (error) {
         if (Date.now() >= searchDeadlineMs - 1000) {
+          searchDeadlineReached = true;
           await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu cyklu minął podczas wyszukiwania. Bot zapisze postęp i wróci do kampanii przy kolejnym uruchomieniu." });
           break;
         }
+        stats.searchedQueries += 1;
+        placesFailedQueries += 1;
         const blocked = isGooglePlacesAccessBlocked(error);
         const message = blocked
           ? `Google Places odrzuciło dostęp: ${errorMessage(error, "błąd uprawnień API")}. ${googlePlacesAccessHelp()}`
@@ -1236,12 +1244,14 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
       for (const place of places) {
         if (stats.queuedEmails >= availableToday) break;
         if (Date.now() >= searchDeadlineMs) {
+          searchDeadlineReached = true;
           await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu pojedynczego cyklu minął podczas sprawdzania kandydatów. Następny cron zacznie od kolejnego zapytania/kandydata." });
-          break;
+          break searchLoop;
         }
         try {
           const targetSkip = shouldSkipPlaceByTarget(campaign, place);
           if (targetSkip.skip) {
+            targetRejected += 1;
             stats.skippedDuplicates += 1;
             await logRun({
               runId,
@@ -1264,6 +1274,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
           });
 
           if (Date.now() >= searchDeadlineMs - 1000) {
+            searchDeadlineReached = true;
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu cyklu minął podczas szukania adresu e-mail. Bot zapisze postęp i spróbuje ponownie przy kolejnym uruchomieniu." });
             break searchLoop;
           }
@@ -1298,11 +1309,13 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
 
           const auditTimeoutMs = Math.min(3500, searchDeadlineMs - Date.now());
           if (auditTimeoutMs < 1000) {
+            searchDeadlineReached = true;
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Za mało czasu pozostało na audyt strony. Bot wróci do tego zadania przy kolejnym uruchomieniu." });
             break searchLoop;
           }
           const audit = await auditWebsite(place.website, auditTimeoutMs);
           if (Date.now() >= searchDeadlineMs - 1000) {
+            searchDeadlineReached = true;
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu cyklu minął podczas audytu strony. Bot zapisze postęp i spróbuje ponownie przy kolejnym uruchomieniu." });
             break searchLoop;
           }
@@ -1322,6 +1335,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
 
           const aiTimeoutMs = Math.min(7000, searchDeadlineMs - Date.now());
           if (aiTimeoutMs < 4000) {
+            searchDeadlineReached = true;
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Pozostało za mało czasu na wygenerowanie bezpiecznej wiadomości. Bot dokończy ten lead przy kolejnym uruchomieniu." });
             break searchLoop;
           }
@@ -1368,6 +1382,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
           }
         } catch (error) {
           if (Date.now() >= searchDeadlineMs - 1000) {
+            searchDeadlineReached = true;
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu cyklu minął podczas sprawdzania leada. Bot zapisze postęp i wznowi wyszukiwanie w następnym cyklu." });
             break searchLoop;
           }
@@ -1379,8 +1394,13 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
       }
     }
 
-    const nextLocationIndex = rawLocations.length ? (rotatedLocations.start + Math.max(stats.searchedQueries, 1)) % rawLocations.length : 0;
-    const nextKeywordIndex = rawSearchTerms.length ? (rotatedTerms.start + Math.max(1, Math.ceil(stats.searchedQueries / Math.max(rawLocations.length, 1)))) % rawSearchTerms.length : 0;
+    // Wznawiamy kolejny element macierzy branża × lokalizacja; przy krótkim cyklu nie pomijamy
+    // pozostałych branż dla tej samej lokalizacji ani lokalizacji dla tej samej branży.
+    const queryAdvance = stats.searchedQueries;
+    const nextLocationIndex = rawLocations.length ? (rotatedLocations.start + (queryAdvance % rawLocations.length)) % rawLocations.length : 0;
+    const nextKeywordIndex = rawSearchTerms.length
+      ? (rotatedTerms.start + Math.floor(queryAdvance / Math.max(rawLocations.length, 1))) % rawSearchTerms.length
+      : 0;
     const underTarget = stats.queuedEmails < availableToday;
     const plannedNextRunAt = (await dynamicScheduleForCampaign(campaign, { strictlyAfter: true })).nextRunAt;
     const retryMinutesRaw = Number(process.env.UNDER_TARGET_RETRY_MINUTES || 3);
@@ -1399,20 +1419,33 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
     }).eq("id", campaign.id);
     const finishStatus = stats.errors.length ? "partial" : "completed";
     if (underTarget) {
+      const noMailReasons: string[] = [];
+      if (placesAccessBlocked) noMailReasons.push("Google Places odrzuciło dostęp; sprawdź klucz, billing i włączone API w Google Cloud.");
+      if (placesFailedQueries > 0 && !placesAccessBlocked) noMailReasons.push(`${placesFailedQueries} zapytań Google Places zakończyło się błędem; sprawdź logi etapu places.`);
+      if (searchDeadlineReached) noMailReasons.push("Cykl osiągnął bezpieczny limit czasu i wznowi wyszukiwanie przy kolejnym uruchomieniu.");
+      if (stats.foundPlaces === 0 && placesFailedQueries === 0 && !placesAccessBlocked) noMailReasons.push("Google Places nie zwróciło firm dla sprawdzonych zapytań i lokalizacji.");
+      if (targetRejected > 0) noMailReasons.push(`Pominięto ${targetRejected} firm spoza targetu kampanii.`);
+      if (stats.missingEmail > 0) noMailReasons.push(`Nie znaleziono poprawnego adresu e-mail dla ${stats.missingEmail} firm.`);
+      if (stats.emailsFound > 0) noMailReasons.push("Pozostałe kontakty z adresem e-mail odpadły na duplikacie, liście blokad albo ocenie kwalifikacji.");
+      const noMailReason = noMailReasons.join(" ") || "Nie zakwalifikowano kontaktu do wysyłki; sprawdź szczegóły w logach kampanii.";
       await logRun({
         runId,
         campaign,
         level: "warning",
         stage: "under_target_retry",
-        message: `Bot nie znalazł dopasowanego kontaktu w tym cyklu, ale kampania NIE zawiesza się i NIE kończy pracy na dziś. Odrzucone leady są ignorowane, a następna próba szukania kolejnego leada startuje: ${nextRunAt}.`,
+        message: `W tym cyklu nie dodano wiadomości do kolejki. ${noMailReason} Szczegóły pominiętych firm są w logach kampanii. Następna próba: ${nextRunAt}.`,
         metadata: {
           targetForToday: availableToday,
           queuedEmails: stats.queuedEmails,
           searchedQueries: stats.searchedQueries,
           foundPlaces: stats.foundPlaces,
+          placesFailedQueries,
           missingEmail: stats.missingEmail,
           emailsFound: stats.emailsFound,
           skippedDuplicates: stats.skippedDuplicates,
+          targetRejected,
+          searchDeadlineReached,
+          noMailReason,
           minScore: minimumQualifiedLeadScore(campaign),
           nextRunAt,
         },
