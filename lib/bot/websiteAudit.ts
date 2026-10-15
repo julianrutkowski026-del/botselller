@@ -10,7 +10,7 @@ export type WebsiteAudit = {
   textSample: string;
 };
 
-export async function auditWebsite(website: string | null | undefined): Promise<WebsiteAudit> {
+export async function auditWebsite(website: string | null | undefined, timeoutMs = 8500): Promise<WebsiteAudit> {
   const url = normalizeUrl(website);
   if (!url) {
     return {
@@ -22,7 +22,7 @@ export async function auditWebsite(website: string | null | undefined): Promise<
     };
   }
 
-  const html = await fetchText(url);
+  const html = await fetchText(url, Math.max(1000, Math.min(timeoutMs, 8500)));
   if (!html) {
     return {
       hasWebsite: true,

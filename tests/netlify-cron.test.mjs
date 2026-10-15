@@ -33,6 +33,7 @@ const successfulRequest = await dispatchNetlifyCron("run-campaigns", {
 assert.deepEqual(successfulRequest, { ok: true, status: 200, reason: null });
 assert.equal(requestDetails.url, "https://salesbot.example/api/cron/run-campaigns");
 assert.equal(requestDetails.options.headers.authorization, "Bearer test-secret");
+assert.ok(requestDetails.options.signal instanceof AbortSignal);
 
 const rejectedRequest = await dispatchNetlifyCron("send-worker", {
   env: { NEXT_PUBLIC_SITE_URL: "https://salesbot.example", CRON_SECRET: "test-secret" },

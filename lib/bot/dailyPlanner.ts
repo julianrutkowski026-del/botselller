@@ -449,7 +449,7 @@ async function normalizeDynamicCampaignSchedule() {
 async function acquireCampaignLock(campaignId: string) {
   const lockId = crypto.randomUUID();
   const now = new Date().toISOString();
-  const expiredAt = new Date(Date.now() - 1000 * 60 * 30).toISOString();
+  const expiredAt = new Date(Date.now() - 1000 * 60 * 3).toISOString();
   const { data, error } = await adminDb()
     .from("campaigns")
     .update({ locked_at: now, locked_by: lockId })
@@ -1176,9 +1176,11 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
     const maxSearchPairsPerCycle = clamp(Math.round(Number(process.env.LEAD_SEARCH_PAIRS_PER_CYCLE || 12)), 1, 50);
     const searchPairs = unique(searchTerms.flatMap((industry) => locations.map((location) => `${industry}|||${location}`))).slice(0, maxSearchPairsPerCycle);
     const perQueryLimit = clamp(Math.round(Number(process.env.LEAD_SEARCH_RESULTS_PER_QUERY || 10)), 3, 20);
-    // W trybie sekwencyjnym szukamy do skutku dla jednej wiadomości, ale z limitem czasu, żeby Vercel nie ubił funkcji po pierwszym odrzuconym leadzie.
+    // Netlify scheduled functions mają krótki limit wykonania; zostawiamy czas na zapis wyniku i zwolnienie blokad.
     const placeSearchBudget = clamp(Math.round(Number(process.env.LEAD_SEARCH_PLACE_BUDGET || Math.max(availableToday * 80, 80))), 20, 400);
-    const searchDeadlineMs = Date.now() + clamp(Math.round(Number(process.env.LEAD_SEARCH_MAX_SECONDS || 45)), 15, 120) * 1000;
+    const configuredSearchSeconds = Number(process.env.LEAD_SEARCH_MAX_SECONDS || 18);
+    const searchSeconds = clamp(Math.round(Number.isFinite(configuredSearchSeconds) ? configuredSearchSeconds : 18), 10, 18);
+    const searchDeadlineMs = Date.now() + searchSeconds * 1000;
 
     await logRun({
       runId,
@@ -1190,7 +1192,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
 
     let slotIndex = 0;
     let placesAccessBlocked = false;
-    for (const pair of searchPairs) {
+    searchLoop: for (const pair of searchPairs) {
       if (stats.queuedEmails >= availableToday) break;
       if (Date.now() >= searchDeadlineMs) {
         await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu pojedynczego cyklu minął. Bot nie zawiesza kampanii, tylko zapisuje kursor i wróci do szukania przy następnym ticku crona." });
@@ -1204,9 +1206,18 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
       stats.searchedQueries += 1;
       let places: PlaceLead[] = [];
       try {
-        places = await searchGooglePlaces({ apiKey: secrets.googlePlaces, industry, location, limit: perQueryLimit, languageCode: languageForLocation(location) });
+        const placesTimeoutMs = Math.min(7000, searchDeadlineMs - Date.now());
+        if (placesTimeoutMs < 1000) {
+          await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Pozostało za mało czasu na kolejne zapytanie Google Places. Bot wróci do niego przy następnym uruchomieniu." });
+          break;
+        }
+        places = await searchGooglePlaces({ apiKey: secrets.googlePlaces, industry, location, limit: perQueryLimit, languageCode: languageForLocation(location), timeoutMs: placesTimeoutMs });
         stats.foundPlaces += places.length;
       } catch (error) {
+        if (Date.now() >= searchDeadlineMs - 1000) {
+          await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu cyklu minął podczas wyszukiwania. Bot zapisze postęp i wróci do kampanii przy kolejnym uruchomieniu." });
+          break;
+        }
         const blocked = isGooglePlacesAccessBlocked(error);
         const message = blocked
           ? `Google Places odrzuciło dostęp: ${errorMessage(error, "błąd uprawnień API")}. ${googlePlacesAccessHelp()}`
@@ -1249,7 +1260,13 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             city: place.city,
             googleSearchApiKey: secrets.googleSearch,
             googleSearchCx: secrets.googleSearchCx,
+            deadlineMs: searchDeadlineMs,
           });
+
+          if (Date.now() >= searchDeadlineMs - 1000) {
+            await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu cyklu minął podczas szukania adresu e-mail. Bot zapisze postęp i spróbuje ponownie przy kolejnym uruchomieniu." });
+            break searchLoop;
+          }
 
           if (!emailResult.email) {
             stats.missingEmail += 1;
@@ -1279,7 +1296,16 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             continue;
           }
 
-          const audit = await auditWebsite(place.website);
+          const auditTimeoutMs = Math.min(3500, searchDeadlineMs - Date.now());
+          if (auditTimeoutMs < 1000) {
+            await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Za mało czasu pozostało na audyt strony. Bot wróci do tego zadania przy kolejnym uruchomieniu." });
+            break searchLoop;
+          }
+          const audit = await auditWebsite(place.website, auditTimeoutMs);
+          if (Date.now() >= searchDeadlineMs - 1000) {
+            await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu cyklu minął podczas audytu strony. Bot zapisze postęp i spróbuje ponownie przy kolejnym uruchomieniu." });
+            break searchLoop;
+          }
           const auditSkip = shouldSkipAfterCheapAudit(campaign, place, audit);
           if (auditSkip.skip) {
             stats.skippedDuplicates += 1;
@@ -1294,7 +1320,12 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             continue;
           }
 
-          const generated = await generateLeadWithAi({ apiKey: openaiApiKey, model: botApi.model, client: campaign.client_accounts, campaign, place, email: recipientEmail, audit });
+          const aiTimeoutMs = Math.min(7000, searchDeadlineMs - Date.now());
+          if (aiTimeoutMs < 4000) {
+            await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Pozostało za mało czasu na wygenerowanie bezpiecznej wiadomości. Bot dokończy ten lead przy kolejnym uruchomieniu." });
+            break searchLoop;
+          }
+          const generated = await generateLeadWithAi({ apiKey: openaiApiKey, model: botApi.model, client: campaign.client_accounts, campaign, place, email: recipientEmail, audit, timeoutMs: aiTimeoutMs });
           const minQualifiedScore = minimumQualifiedLeadScore(campaign);
           if (generated.score < minQualifiedScore) {
             stats.skippedDuplicates += 1;
@@ -1336,6 +1367,10 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             await logRun({ runId, campaign, stage: "queued", message: `Zaplanowano mail do ${place.companyName} na ${scheduledAt}. Lead pojawi się w panelu dopiero po wysłaniu.` });
           }
         } catch (error) {
+          if (Date.now() >= searchDeadlineMs - 1000) {
+            await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu cyklu minął podczas sprawdzania leada. Bot zapisze postęp i wznowi wyszukiwanie w następnym cyklu." });
+            break searchLoop;
+          }
           const message = `${place.companyName}: ${errorMessage(error, "błąd planowania leada")}`;
           stats.queueFailures += 1;
           stats.errors.push(message);
@@ -1420,9 +1455,42 @@ async function globalSchedulerGuard(activeSchedulerItems: number) {
   return { allowed: true, reason: null as string | null };
 }
 
+async function recoverStaleCampaignRuns() {
+  const db = adminDb();
+  const recoveredAt = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data, error } = await db
+    .from("campaign_runs")
+    .select("id,errors")
+    .eq("status", "running")
+    .lt("started_at", staleBefore)
+    .order("started_at", { ascending: true })
+    .limit(100);
+  if (error) throw error;
+
+  const rows = data || [];
+  const results = await Promise.all(rows.map(async (run) => {
+    const errors = Array.isArray(run.errors) ? run.errors : [];
+    const recoveryMessage = "Przerwane uruchomienie: proces nie zapisał końcowego statusu. Status odzyskany przez harmonogram.";
+    const { error: updateError } = await db
+      .from("campaign_runs")
+      .update({
+        status: "partial",
+        finished_at: recoveredAt,
+        errors: [...errors, recoveryMessage],
+      })
+      .eq("id", run.id)
+      .eq("status", "running");
+    if (updateError) throw updateError;
+    return true;
+  }));
+  return results.length;
+}
+
 export async function planDueCampaigns(limit?: number) {
   const lockName = "cron:run-campaigns:dynamic-scheduler";
-  const lockId = await acquireSystemLock(lockName, 5);
+  // Maksymalny czas pracy jest ograniczony do 18 s; krótki TTL odblokowuje scheduler po przerwanym requestcie.
+  const lockId = await acquireSystemLock(lockName, 2);
   if (!lockId) {
     return {
       processed: 0,
@@ -1434,10 +1502,11 @@ export async function planDueCampaigns(limit?: number) {
   }
 
   try {
+    const recoveredStaleRuns = await recoverStaleCampaignRuns();
     const normalizedSchedule = await normalizeDynamicCampaignSchedule();
     const globalGuard = await globalSchedulerGuard(normalizedSchedule.activeSchedulerItems || 0);
     if (!globalGuard.allowed) {
-      return { processed: 0, skipped: true, reason: globalGuard.reason, normalizedSchedule, results: [] };
+      return { processed: 0, skipped: true, reason: globalGuard.reason, normalizedSchedule, recoveredStaleRuns, results: [] };
     }
     const now = new Date().toISOString();
     let query = adminDb()
@@ -1468,7 +1537,7 @@ export async function planDueCampaigns(limit?: number) {
         results.push({ campaignId: campaign.id, botId: campaign.bot_id || null, clientId: campaign.client_id || null, ok: false, error: errorMessage(error, "Błąd planowania") });
       }
     }
-    return { processed: results.length, normalizedSchedule, maxCampaignsPerCronTick: 1, results };
+    return { processed: results.length, normalizedSchedule, recoveredStaleRuns, maxCampaignsPerCronTick: 1, results };
   } finally {
     await releaseSystemLock(lockName, lockId);
   }

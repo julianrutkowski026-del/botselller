@@ -34,7 +34,7 @@ export type EmailFinderResult = {
   checkedUrls: string[];
 };
 
-export async function findEmailOnWebsite(website: string | null | undefined): Promise<EmailFinderResult> {
+export async function findEmailOnWebsite(website: string | null | undefined, deadlineMs?: number): Promise<EmailFinderResult> {
   const base = normalizeUrl(website);
   if (!base) return { email: null, source: "none", checkedUrls: [] };
 
@@ -42,10 +42,12 @@ export async function findEmailOnWebsite(website: string | null | undefined): Pr
   const found: string[] = [];
 
   for (const path of contactPaths) {
+    const remainingMs = deadlineMs === undefined ? 8500 : deadlineMs - Date.now();
+    if (remainingMs < 250) break;
     const url = resolvePath(base, path);
     if (!url || checkedUrls.includes(url)) continue;
     checkedUrls.push(url);
-    const html = await fetchText(url);
+    const html = await fetchText(url, Math.min(3500, remainingMs));
     if (!html) continue;
     found.push(...extractEmails(html));
     const text = stripHtml(html);
@@ -62,6 +64,7 @@ export async function findEmailWithGoogleSearch(args: {
   companyName: string;
   website?: string | null;
   city?: string | null;
+  deadlineMs?: number;
 }): Promise<EmailFinderResult> {
   if (!args.apiKey || !args.cx) return { email: null, source: "none", checkedUrls: [] };
 
@@ -78,13 +81,23 @@ export async function findEmailWithGoogleSearch(args: {
   const emails: string[] = [];
 
   for (const q of queries) {
+    const remainingMs = args.deadlineMs === undefined ? 6500 : args.deadlineMs - Date.now();
+    if (remainingMs < 250) break;
     const url = new URL("https://www.googleapis.com/customsearch/v1");
     url.searchParams.set("key", args.apiKey);
     url.searchParams.set("cx", args.cx);
     url.searchParams.set("q", q);
     url.searchParams.set("num", "5");
 
-    const response = await fetch(url.toString());
+    let response: Response;
+    try {
+      response = await fetch(url.toString(), {
+        signal: AbortSignal.timeout(Math.min(3500, remainingMs)),
+      });
+    } catch {
+      if (args.deadlineMs !== undefined && Date.now() >= args.deadlineMs) break;
+      continue;
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) continue;
 
@@ -94,7 +107,9 @@ export async function findEmailWithGoogleSearch(args: {
       const link = typeof item?.link === "string" ? item.link : null;
       if (!link || checkedUrls.includes(link)) continue;
       checkedUrls.push(link);
-      const html = await fetchText(link, 6500);
+      const pageRemainingMs = args.deadlineMs === undefined ? 6500 : args.deadlineMs - Date.now();
+      if (pageRemainingMs < 250) break;
+      const html = await fetchText(link, Math.min(2500, pageRemainingMs));
       if (html) emails.push(...extractEmails(html), ...extractEmails(stripHtml(html)));
       if (emails.length) return { email: bestEmail(unique(emails)), source: "google_search", checkedUrls };
     }
@@ -109,8 +124,9 @@ export async function findBusinessEmail(args: {
   city?: string | null;
   googleSearchApiKey?: string | null;
   googleSearchCx?: string | null;
+  deadlineMs?: number;
 }) {
-  const websiteResult = await findEmailOnWebsite(args.website);
+  const websiteResult = await findEmailOnWebsite(args.website, args.deadlineMs);
   if (websiteResult.email) return websiteResult;
 
   const googleResult = await findEmailWithGoogleSearch({
@@ -119,6 +135,7 @@ export async function findBusinessEmail(args: {
     companyName: args.companyName,
     website: args.website,
     city: args.city,
+    deadlineMs: args.deadlineMs,
   });
 
   return googleResult.email

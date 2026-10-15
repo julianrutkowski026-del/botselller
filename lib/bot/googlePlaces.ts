@@ -39,6 +39,7 @@ export async function searchGooglePlaces(args: {
   location: string;
   limit: number;
   languageCode?: EmailLanguage;
+  timeoutMs?: number;
 }): Promise<PlaceLead[]> {
   const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
@@ -57,6 +58,7 @@ export async function searchGooglePlaces(args: {
         "places.types",
       ].join(","),
     },
+    signal: AbortSignal.timeout(Math.max(1000, Math.min(args.timeoutMs ?? 7000, 7000))),
     body: JSON.stringify({
       textQuery: `${localizeSportsSearchTerm(args.industry, args.languageCode)} ${args.location}`,
       languageCode: args.languageCode || "pl",
