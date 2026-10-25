@@ -17,9 +17,9 @@ const SPORTS_WORD = /\b(sport\w*|pilk\w*|futbol\w*|football\w*|fussball\w*|siatk
 function targetCategories(source: string): SportsBuyerCategory[] {
   const target = normalizeTargetText(source);
   const categories: SportsBuyerCategory[] = [];
-  if (/\b(klub\w*|verein\w*|club\w*)\b/.test(target)) categories.push("club");
+  if (/\b(klub\w*|verein\w*|club\w*|sportverein\w*|sportclub\w*|fussballverein\w*|fussballclub\w*)\b/.test(target)) categories.push("club");
   if (/\b(akadem\w*|academy\w*|sportakadem\w*)\b/.test(target)) categories.push("academy");
-  if (/\b(druzyn\w*|team\w*|mannschaft\w*)\b/.test(target)) categories.push("team");
+  if (/\b(druzyn\w*|team\w*|mannschaft\w*|sportmannschaft\w*|fussballmannschaft\w*)\b/.test(target)) categories.push("team");
   return categories;
 }
 

@@ -9,6 +9,7 @@ import { searchGooglePlaces, type PlaceLead } from "@/lib/bot/googlePlaces";
 import { emailLanguageForCampaignLocation, languageForLocation } from "@/lib/locationOptions";
 import { buildLeadEmailHtml, buildLeadEmailText, buildSenderPersona } from "@/lib/bot/mailer";
 import { getSendCapacity, requiredCampaignNumber, requiredCampaignTimeZone } from "@/lib/bot/sendSafety";
+import { isSportsOrganizationOnlyTarget, matchesSportsOrganizationTarget } from "@/lib/bot/sportsBuyerTarget";
 import { auditWebsite } from "@/lib/bot/websiteAudit";
 import { getBotSecrets } from "@/lib/secretStore";
 import { adminDb } from "@/lib/supabaseAdmin";
@@ -49,6 +50,26 @@ function pickSearchLocation(campaign: Campaign) {
   const value = firstText(campaign.target_locations);
   if (!value) throw new Error("Realny test leada wymaga lokalizacji targetu w kampanii.");
   return value;
+}
+
+function primaryTargetSource(campaign: Campaign) {
+  return [
+    campaign.search_keywords,
+    ...(campaign.target_industries || []),
+    campaign.exact_target_business_type,
+    campaign.target_audience_niche,
+  ].filter(Boolean).join("\n");
+}
+
+function minimumQualifiedScore(campaign: Campaign) {
+  const configured = Number(campaign.min_score);
+  return Math.max(0, Math.min(10, Math.round(Number.isFinite(configured) && configured > 0 ? configured : 7)));
+}
+
+function targetDescription(place: PlaceLead) {
+  return [place.companyName, place.industry, place.city, place.address, place.primaryType, ...place.types]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function leadPayload(place: PlaceLead, email: string | null, generated: Awaited<ReturnType<typeof generateLeadWithAi>>, emailSource: string) {
@@ -106,10 +127,23 @@ export async function POST(request: Request) {
 
     const industry = pickSearchIndustry(campaign);
     const location = pickSearchLocation(campaign);
+    const targetSource = primaryTargetSource(campaign);
+    const targetRequiresSportsOrganization = isSportsOrganizationOnlyTarget(targetSource);
+    const minScore = minimumQualifiedScore(campaign);
     const places = await searchGooglePlaces({ apiKey: secrets.googlePlaces, industry, location, limit: 5, languageCode: languageForLocation(location) });
     const attempts: Array<Record<string, unknown>> = [];
 
     for (const place of places) {
+      if (targetRequiresSportsOrganization && !matchesSportsOrganizationTarget(targetSource, targetDescription(place))) {
+        attempts.push({
+          companyName: place.companyName,
+          website: place.website,
+          city: place.city,
+          skippedReason: "Nie potwierdzono, że to klub, akademia lub drużyna sportowa.",
+        });
+        continue;
+      }
+
       const emailResult = await findBusinessEmail({
         companyName: place.companyName,
         website: place.website,
@@ -118,8 +152,10 @@ export async function POST(request: Request) {
         googleSearchCx: secrets.googleSearchCx,
         language: emailLanguageForCampaignLocation(campaign.location_scope, campaign.target_locations, place.city, place.address),
       });
-      attempts.push({ companyName: place.companyName, website: place.website, city: place.city, email: emailResult.email, emailSource: emailResult.source, checkedUrls: emailResult.checkedUrls });
-      if (!emailResult.email) continue;
+      if (!emailResult.email) {
+        attempts.push({ companyName: place.companyName, website: place.website, city: place.city, email: null, emailSource: emailResult.source, checkedUrls: emailResult.checkedUrls, skippedReason: "Nie znaleziono publicznego adresu e-mail." });
+        continue;
+      }
 
       const audit = await auditWebsite(place.website);
       const generated = await generateLeadWithAi({
@@ -131,6 +167,12 @@ export async function POST(request: Request) {
         email: emailResult.email,
         audit,
       });
+      const attempt = { companyName: place.companyName, website: place.website, city: place.city, email: emailResult.email, emailSource: emailResult.source, checkedUrls: emailResult.checkedUrls, score: generated.score };
+      if (generated.score < minScore) {
+        attempts.push({ ...attempt, skippedReason: `Dopasowanie ${generated.score}/10 jest poniżej progu kampanii ${minScore}/10.` });
+        continue;
+      }
+      attempts.push(attempt);
       const persona = buildSenderPersona(campaign.client_accounts, campaign, campaign.client_accounts.smtp_user || "");
       const payload = leadPayload(place, emailResult.email, generated, emailResult.source);
 
@@ -151,6 +193,7 @@ export async function POST(request: Request) {
         scheduler,
         capacity,
         search: { industry, location, placesChecked: attempts.length },
+        qualification: { minScore, targetRequiresSportsOrganization },
         lead: payload,
         audit,
         generated: {
@@ -163,10 +206,18 @@ export async function POST(request: Request) {
       }, { headers });
     }
 
+    const lowScoreAttempts = attempts.filter((attempt) => typeof attempt.score === "number" && attempt.score < minScore).length;
+    const emailAttempts = attempts.filter((attempt) => typeof attempt.email === "string").length;
+    const recommendation = lowScoreAttempts
+      ? `Znaleziono ${emailAttempts} adresów, ale ${lowScoreAttempts} leadów nie osiągnęło wymaganego dopasowania ${minScore}/10. Nic nie dodano do kolejki.`
+      : places.length
+        ? "Google znalazł firmy, ale nie udało się potwierdzić publicznego adresu e-mail dla kwalifikowanych klubów/akademii/drużyn. Sprawdź Google Search API/CX i adresy witryn."
+        : "Google Places nie zwróciło firm. Zmień branżę/lokalizację lub sprawdź Google Places API.";
+
     await createAdminNotification({
       tone: "warning",
-      title: "Test kampanii nie znalazł maila",
-      message: `Realny test kampanii ${campaign.name} sprawdził ${places.length} firm dla zapytania „${industry} ${location}”, ale nie znalazł używalnego adresu email.`,
+      title: lowScoreAttempts ? "Test kampanii nie znalazł dobrego dopasowania" : "Test kampanii nie znalazł maila",
+      message: `Realny test kampanii ${campaign.name} sprawdził ${places.length} firm dla zapytania „${industry} ${location}”. ${recommendation}`,
       resource: "campaigns",
       resourceId: campaign.id,
       dedupeKey: `campaign-live-test:no-email:${campaign.id}`,
@@ -179,8 +230,9 @@ export async function POST(request: Request) {
       scheduler,
       capacity,
       search: { industry, location, placesFound: places.length, placesChecked: attempts.length },
+      qualification: { minScore, targetRequiresSportsOrganization },
       attempts,
-      recommendation: places.length ? "Google znalazł firmy, ale email finder nie znalazł adresu. Doprecyzuj target lub sprawdź Google Search API/CX." : "Google Places nie zwróciło firm. Zmień branżę/lokalizację lub sprawdź Google Places API.",
+      recommendation,
     }, { headers });
   } catch (error) {
     return jsonError(errorMessage(error, "Nie udało się wykonać realnego testu leada."), 500);
