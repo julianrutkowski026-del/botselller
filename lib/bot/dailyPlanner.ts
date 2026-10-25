@@ -3,6 +3,7 @@ import "server-only";
 import crypto from "crypto";
 
 import { generateLeadWithAi } from "@/lib/bot/aiLead";
+import { prioritizeLeadCandidates } from "@/lib/bot/leadCandidatePriority";
 import { isWeekendInTimeZone, nextBusinessDayAtHour } from "@/lib/bot/businessDays";
 import { findBusinessEmail, type EmailFinderResult } from "@/lib/bot/emailFinder";
 import { isValidRecipientEmail, normalizeEmailCandidate } from "@/lib/bot/emailValidation";
@@ -1271,7 +1272,11 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
         emailLookupOutcomes.set(outcome.place, { result: outcome.result, error: outcome.error });
       }
 
-      for (const place of places) {
+      const prioritizedPlaces = prioritizeLeadCandidates(places, {
+        isTarget: (place) => !shouldSkipPlaceByTarget(activeCampaign, place).skip,
+        contact: (place) => emailLookupOutcomes.get(place)?.result,
+      });
+      for (const place of prioritizedPlaces) {
         if (stats.queuedEmails >= availableToday) break;
         if (Date.now() >= searchDeadlineMs) {
           searchDeadlineReached = true;
