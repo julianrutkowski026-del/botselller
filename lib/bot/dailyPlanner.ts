@@ -19,9 +19,9 @@ import {
 import { advanceCampaignSearchCursor, buildCampaignSearchPairs } from "@/lib/bot/searchCursor";
 import { domainKey, toList, unique } from "@/lib/bot/utils";
 import { auditWebsite } from "@/lib/bot/websiteAudit";
-import { decryptSecret } from "@/lib/cryptoSecrets";
 import { getBotSecrets } from "@/lib/secretStore";
 import { acquireSystemLock, releaseSystemLock } from "@/lib/bot/runLock";
+import { botApiConfig } from "@/lib/bot/botApiConfig";
 import { adminDb } from "@/lib/supabaseAdmin";
 import type { Campaign, ClientAccount, LogLevel } from "@/lib/types";
 
@@ -32,16 +32,6 @@ type ClientWithMailSecrets = ClientAccount & {
 };
 
 type CampaignWithClient = Campaign & { client_accounts: ClientWithMailSecrets | null };
-
-type BotApiSecrets = {
-  id: string;
-  name: string;
-  provider?: string | null;
-  model?: string | null;
-  api_key_encrypted?: string | null;
-  api_key_iv?: string | null;
-  api_key_auth_tag?: string | null;
-};
 
 export type DailyPlanStats = {
   searchedQueries: number;
@@ -77,24 +67,6 @@ function emptyStats(): DailyPlanStats {
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
-}
-
-async function botApiConfig(botId?: string | null) {
-  if (!botId) return { openaiKey: null as string | null, model: null as string | null, source: "global" as const };
-  const { data, error } = await adminDb()
-    .from("bots")
-    .select("id,name,provider,model,api_key_encrypted,api_key_iv,api_key_auth_tag")
-    .eq("id", botId)
-    .single<BotApiSecrets>();
-  if (error || !data) return { openaiKey: null as string | null, model: null as string | null, source: "global" as const };
-  if (data.api_key_encrypted && data.api_key_iv && data.api_key_auth_tag) {
-    return {
-      openaiKey: decryptSecret({ encrypted_value: data.api_key_encrypted, iv: data.api_key_iv, auth_tag: data.api_key_auth_tag }),
-      model: data.model || null,
-      source: "bot" as const,
-    };
-  }
-  return { openaiKey: null as string | null, model: data.model || null, source: "global" as const };
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -1391,7 +1363,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             continue;
           }
 
-          const aiTimeoutMs = Math.min(8500, searchDeadlineMs - Date.now() - 1_200);
+          const aiTimeoutMs = Math.min(9000, searchDeadlineMs - Date.now() - 1_200);
           if (aiTimeoutMs < 6500) {
             searchDeadlineReached = true;
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Pozostało za mało czasu na wygenerowanie bezpiecznej wiadomości. Bot dokończy ten lead przy kolejnym uruchomieniu." });

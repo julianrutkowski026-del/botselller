@@ -247,7 +247,7 @@ Znaleziony lead:
 Audyt automatyczny strony:
 - Problemy: ${args.audit.problems.join(" | ")}
 - Sygnały: ${args.audit.signals.join(" | ")}
-- Próbka treści: ${args.audit.textSample.slice(0, 900)}
+- Próbka treści: ${args.audit.textSample.slice(0, 600)}
 
 Zadanie:
 ${sportsBuyerInstruction}
@@ -299,7 +299,7 @@ Zwróć wyłącznie JSON.
     body: JSON.stringify({
       model: args.model || process.env.OPENAI_MODEL || "gpt-5.5",
       input: [{ role: "user", content: prompt }],
-      max_output_tokens: 1200,
+      max_output_tokens: 800,
       text: {
         format: {
           type: "json_schema",

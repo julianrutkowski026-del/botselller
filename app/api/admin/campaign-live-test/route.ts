@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminNotification } from "@/lib/adminNotifications";
 import { verifyAdmin } from "@/lib/adminAuth";
+import { botApiConfig } from "@/lib/bot/botApiConfig";
 import { generateLeadWithAi } from "@/lib/bot/aiLead";
 import { findBusinessEmail } from "@/lib/bot/emailFinder";
 import { searchGooglePlaces, type PlaceLead } from "@/lib/bot/googlePlaces";
@@ -99,6 +100,9 @@ export async function POST(request: Request) {
     const capacity = await getSendCapacity(campaign.client_accounts, campaign);
     const secrets = await getBotSecrets();
     if (!secrets.googlePlaces) return jsonError("Brakuje Google Places API key. Nie mogę wykonać realnego testu leada.", 400);
+    const botApi = await botApiConfig(campaign.bot_id);
+    const openaiApiKey = botApi.openaiKey || secrets.openai;
+    if (!openaiApiKey) return jsonError("Brakuje API key OpenAI przypisanego do bota lub globalnego OPENAI_API_KEY. Nie mogę ocenić leada ani przygotować testowej treści.", 400);
 
     const industry = pickSearchIndustry(campaign);
     const location = pickSearchLocation(campaign);
@@ -119,7 +123,8 @@ export async function POST(request: Request) {
 
       const audit = await auditWebsite(place.website);
       const generated = await generateLeadWithAi({
-        apiKey: secrets.openai,
+        apiKey: openaiApiKey,
+        model: botApi.model,
         client: campaign.client_accounts,
         campaign,
         place,
