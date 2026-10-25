@@ -45,9 +45,9 @@ export function sportsOrganizationAliases(source: string) {
   if (!isSportsOrganizationOnlyTarget(source)) return [];
   const categories = targetCategories(normalizeTargetText(source));
   return [
-    ...(categories.includes("club") ? ["klub", "sportverein", "sports club", "football club", "fussball club"] : []),
-    ...(categories.includes("academy") ? ["akademia", "academy", "sportakademie", "sports academy", "fussballakademie"] : []),
-    ...(categories.includes("team") ? ["druzyna", "team", "mannschaft", "sports team", "sportmannschaft"] : []),
+    ...(categories.includes("club") ? ["klub", "sportverein", "sportclub", "fussballverein", "fussball club", "sports club", "football club"] : []),
+    ...(categories.includes("academy") ? ["akademia", "academy", "sportakademie", "sports academy", "fussballakademie", "fussball akademie", "fussballschule"] : []),
+    ...(categories.includes("team") ? ["druzyna", "team", "mannschaft", "sports team", "sportmannschaft", "fussballmannschaft", "fussball team"] : []),
   ];
 }
 

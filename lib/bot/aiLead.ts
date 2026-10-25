@@ -295,7 +295,7 @@ Zwróć wyłącznie JSON.
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${args.apiKey}`, "Content-Type": "application/json" },
-    ...(args.timeoutMs ? { signal: AbortSignal.timeout(Math.max(1000, Math.min(args.timeoutMs, 8000))) } : {}),
+    ...(args.timeoutMs ? { signal: AbortSignal.timeout(Math.max(1000, Math.min(args.timeoutMs, 9000))) } : {}),
     body: JSON.stringify({
       model: args.model || process.env.OPENAI_MODEL || "gpt-5.5",
       input: [{ role: "user", content: prompt }],

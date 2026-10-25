@@ -6,7 +6,7 @@ import type { EmailLanguage } from "@/lib/locationOptions";
 
 const CONTACT_PATHS: Record<EmailLanguage, string[]> = {
   pl: ["", "/kontakt", "/o-nas", "/firma", "/oferta", "/polityka-prywatnosci"],
-  de: ["", "/impressum", "/kontakt", "/datenschutz", "/ueber-uns", "/uber-uns", "/contact"],
+  de: ["", "/impressum", "/kontakt", "/ueber-uns", "/contact"],
   en: ["", "/contact", "/about", "/imprint", "/privacy-policy", "/company"],
   fr: ["", "/mentions-legales", "/contact", "/a-propos", "/politique-de-confidentialite"],
   es: ["", "/aviso-legal", "/contacto", "/sobre-nosotros", "/privacidad"],
@@ -65,12 +65,30 @@ function isDeliverableBusinessEmail(email: string) {
 
 function bestEmail(emails: string[]) {
   const usable = emails.map(normalizeEmailCandidate).filter(isDeliverableBusinessEmail);
-  const preferred = usable.find((email) => /^(kontakt|biuro|office|info|recepcja|sprzedaz|sales|hello|verein|geschaeftsstelle)@/i.test(email));
+  const preferred = usable.find((email) => /^(kontakt|biuro|office|info|recepcja|sprzedaz|sales|hello|verein|geschaeftsstelle|vorstand)@/i.test(email));
   return preferred || usable[0] || null;
 }
 
+function cloudflareEmails(html: string) {
+  const emails: string[] = [];
+  for (const match of html.matchAll(/data-cfemail=["']([0-9a-f]{6,})["']/gi)) {
+    const encoded = match[1];
+    const key = Number.parseInt(encoded.slice(0, 2), 16);
+    if (!Number.isFinite(key)) continue;
+    let decoded = "";
+    for (let index = 2; index + 1 < encoded.length; index += 2) {
+      decoded += String.fromCharCode(Number.parseInt(encoded.slice(index, index + 2), 16) ^ key);
+    }
+    if (decoded.includes("@")) emails.push(decoded);
+  }
+  return emails;
+}
+
 function pageEmails(html: string) {
-  return [...extractEmails(html), ...extractEmails(stripHtml(html))];
+  const deobfuscated = html
+    .replace(/\s*(?:\[at\]|\(at\)|\{at\})\s*/gi, "@")
+    .replace(/\s*(?:\[dot\]|\(dot\)|\{dot\})\s*/gi, ".");
+  return [...extractEmails(deobfuscated), ...extractEmails(stripHtml(deobfuscated)), ...cloudflareEmails(html)];
 }
 
 export type EmailFinderResult = {
@@ -87,10 +105,9 @@ export async function findEmailOnWebsite(
   const base = normalizeUrl(website);
   if (!base) return { email: null, source: "none", checkedUrls: [] };
 
-  // A single lead must not spend the whole short Netlify cycle waiting on a set of
-  // sequential, absent contact pages. Check the home page and localized legal/contact
-  // pages together so German sites get /impressum while the overall lookup stays bounded.
-  const lookupDeadline = Math.min(deadlineMs ?? Date.now() + 4500, Date.now() + 4500);
+  // Check the homepage and local contact/legal pages concurrently. German clubs often
+  // publish their public address on /impressum, so keep that page ahead of generic paths.
+  const lookupDeadline = Math.min(deadlineMs ?? Date.now() + 2300, Date.now() + 2300);
   const checkedUrls = unique((CONTACT_PATHS[language] || CONTACT_PATHS.en)
     .slice(0, 5)
     .map((path) => resolvePath(base, path))
@@ -99,7 +116,7 @@ export async function findEmailOnWebsite(
   if (remainingMs < 250) return { email: null, source: "none", checkedUrls: [] };
 
   const results = await Promise.all(checkedUrls.map(async (url) => {
-    const timeoutMs = Math.max(250, Math.min(1400, lookupDeadline - Date.now()));
+    const timeoutMs = Math.max(250, Math.min(700, lookupDeadline - Date.now()));
     const html = await fetchText(url, timeoutMs);
     return { url, emails: html ? pageEmails(html) : [] };
   }));
@@ -126,7 +143,7 @@ export async function findEmailWithGoogleSearch(args: {
     ? `site:${domain}`
     : `"${args.companyName}" ${args.city || ""}`;
   const checkedUrls: string[] = [];
-  const searchDeadline = Math.min(args.deadlineMs ?? Date.now() + 3500, Date.now() + 3500);
+  const searchDeadline = Math.min(args.deadlineMs ?? Date.now() + 2200, Date.now() + 2200);
   const remainingMs = searchDeadline - Date.now();
   if (remainingMs < 250) return { email: null, source: "none", checkedUrls };
 
@@ -135,12 +152,12 @@ export async function findEmailWithGoogleSearch(args: {
   url.searchParams.set("cx", args.cx);
   url.searchParams.set("q", query);
   url.searchParams.set("orTerms", `${terms.legal} ${terms.contact} ${terms.email}`);
-  url.searchParams.set("num", "5");
+  url.searchParams.set("num", "10");
   url.searchParams.set("lr", `lang_${language}`);
 
   let response: Response;
   try {
-    response = await fetch(url.toString(), { signal: AbortSignal.timeout(Math.max(250, Math.min(1800, remainingMs))) });
+    response = await fetch(url.toString(), { signal: AbortSignal.timeout(Math.max(250, Math.min(1400, remainingMs))) });
   } catch {
     return { email: null, source: "none", checkedUrls };
   }
@@ -159,7 +176,7 @@ export async function findEmailWithGoogleSearch(args: {
   checkedUrls.push(...links);
   const pageRemainingMs = searchDeadline - Date.now();
   if (pageRemainingMs < 250) return { email: null, source: "none", checkedUrls };
-  const pageTimeoutMs = Math.min(1000, pageRemainingMs);
+  const pageTimeoutMs = Math.min(600, pageRemainingMs);
   const pages = await Promise.all(links.map(async (link: string) => {
     const html = await fetchText(link, pageTimeoutMs);
     return html ? pageEmails(html) : [];

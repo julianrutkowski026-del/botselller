@@ -14,8 +14,11 @@ assert.deepEqual(rules.sportsOrganizationSearchTerms(target), ["klub sportowy", 
 assert.equal(rules.isSportsOrganizationOnlyTarget("kluby sportowe, agencje eventowe i marki odzieżowe"), false);
 
 assert.equal(rules.matchesSportsOrganizationTarget(target, "TSV 1860 München · sports club"), true);
+assert.equal(rules.matchesSportsOrganizationTarget(target, "FC Bayern München · Fußballverein"), true);
 assert.equal(rules.matchesSportsOrganizationTarget(target, "Sportakademie Berlin"), true);
+assert.equal(rules.matchesSportsOrganizationTarget(target, "Münchner Fußball-Akademie"), true);
 assert.equal(rules.matchesSportsOrganizationTarget(target, "Amateurmannschaft München · sport team"), true);
+assert.equal(rules.matchesSportsOrganizationTarget(target, "Köln · Fußballmannschaft"), true);
 assert.equal(rules.matchesSportsOrganizationTarget(target, "Meyer Eventagentur · sports event team"), false);
 assert.equal(rules.matchesSportsOrganizationTarget(target, "Nürnberg Convention Center · event venue · sports events"), false);
 assert.equal(rules.matchesSportsOrganizationTarget(target, "Sputnikhalle · nightclub · concerts"), false);

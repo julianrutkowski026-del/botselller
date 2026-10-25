@@ -62,7 +62,7 @@ export async function searchGooglePlaces(args: {
     body: JSON.stringify({
       textQuery: `${localizeSportsSearchTerm(args.industry, args.languageCode)} ${args.location}`,
       languageCode: args.languageCode || "pl",
-      maxResultCount: Math.min(Math.max(args.limit, 1), 20),
+      pageSize: Math.min(Math.max(args.limit, 1), 20),
     }),
   });
 

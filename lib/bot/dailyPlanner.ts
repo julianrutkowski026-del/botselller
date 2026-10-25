@@ -4,7 +4,7 @@ import crypto from "crypto";
 
 import { generateLeadWithAi } from "@/lib/bot/aiLead";
 import { isWeekendInTimeZone, nextBusinessDayAtHour } from "@/lib/bot/businessDays";
-import { findBusinessEmail } from "@/lib/bot/emailFinder";
+import { findBusinessEmail, type EmailFinderResult } from "@/lib/bot/emailFinder";
 import { isValidRecipientEmail, normalizeEmailCandidate } from "@/lib/bot/emailValidation";
 import { googlePlacesAccessHelp, isGooglePlacesAccessBlocked, searchGooglePlaces, type PlaceLead } from "@/lib/bot/googlePlaces";
 import { expandCampaignLocations, languageForLocation } from "@/lib/bot/locationPresets";
@@ -16,6 +16,7 @@ import {
   sportsOrganizationAliases,
   sportsOrganizationSearchTerms,
 } from "@/lib/bot/sportsBuyerTarget";
+import { advanceCampaignSearchCursor, buildCampaignSearchPairs } from "@/lib/bot/searchCursor";
 import { domainKey, toList, unique } from "@/lib/bot/utils";
 import { auditWebsite } from "@/lib/bot/websiteAudit";
 import { decryptSecret } from "@/lib/cryptoSecrets";
@@ -98,6 +99,21 @@ async function botApiConfig(botId?: string | null) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, mapper: (item: T, index: number) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(items.length, Math.max(1, Math.floor(concurrency)));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index], index);
+    }
+  }));
+  return results;
 }
 
 function requiredPanelNumber(value: unknown, label: string) {
@@ -1159,8 +1175,8 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
 
     if (availableToday <= 0) {
       await logRun({ runId, campaign, level: "warning", stage: "limits", message: `Brak miejsca w dzisiejszym limicie. Cel kampanii z panelu: ${campaignDailyTarget}, limit warm-up/dzienny: ${capacity.dailyLimit}, wysłane dziś w tej kampanii: ${campaignSentToday}, już w kolejce tej kampanii: ${alreadyQueuedToday}.` });
-      const nextLocationIndex = rawLocations.length ? (rotatedLocations.start + Math.max(stats.searchedQueries, 1)) % rawLocations.length : 0;
-    const nextKeywordIndex = rawSearchTerms.length ? (rotatedTerms.start + Math.max(1, Math.ceil(stats.searchedQueries / Math.max(rawLocations.length, 1)))) % rawSearchTerms.length : 0;
+      const nextLocationIndex = rotatedLocations.start;
+      const nextKeywordIndex = rotatedTerms.start;
     await db.from("campaigns").update({
       last_run_at: new Date().toISOString(),
       next_run_at: nextRunDate(timeZone, campaign.send_on_weekends === true, startHour),
@@ -1179,12 +1195,20 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
       workWindowHours: dynamicSchedule.workWindowMinutes / 60,
     };
     const maxSearchPairsPerCycle = clamp(Math.round(Number(process.env.LEAD_SEARCH_PAIRS_PER_CYCLE || 12)), 1, 50);
-    const searchPairs = unique(searchTerms.flatMap((industry) => locations.map((location) => `${industry}|||${location}`))).slice(0, maxSearchPairsPerCycle);
-    const perQueryLimit = clamp(Math.round(Number(process.env.LEAD_SEARCH_RESULTS_PER_QUERY || 10)), 3, 20);
+    const searchPairs = buildCampaignSearchPairs({
+      industries: rawSearchTerms,
+      locations: rawLocations,
+      startIndustryIndex: rotatedTerms.start,
+      startLocationIndex: rotatedLocations.start,
+      limit: maxSearchPairsPerCycle,
+    });
+    const perQueryLimit = clamp(Math.round(Number(process.env.LEAD_SEARCH_RESULTS_PER_QUERY || 10)), 3, 10);
     // Netlify scheduled functions mają krótki limit wykonania; zostawiamy czas na zapis wyniku i zwolnienie blokad.
     const placeSearchBudget = clamp(Math.round(Number(process.env.LEAD_SEARCH_PLACE_BUDGET || Math.max(availableToday * 80, 80))), 20, 400);
-    const configuredSearchSeconds = Number(process.env.LEAD_SEARCH_MAX_SECONDS || 18);
-    const searchSeconds = clamp(Math.round(Number.isFinite(configuredSearchSeconds) ? configuredSearchSeconds : 18), 10, 18);
+    const configuredSearchSeconds = Number(process.env.LEAD_SEARCH_MAX_SECONDS || 22);
+    // Netlify's scheduled wrapper waits up to 25 seconds. Keep a 3-second margin
+    // for final database writes, logs, and releasing the campaign lock.
+    const searchSeconds = clamp(Math.round(Number.isFinite(configuredSearchSeconds) ? configuredSearchSeconds : 22), 10, 22);
     const searchDeadlineMs = Date.now() + searchSeconds * 1000;
 
     await logRun({
@@ -1211,7 +1235,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
         await logRun({ runId, campaign, level: "warning", stage: "search_budget", message: `Bot sprawdził już ${stats.foundPlaces} firm i nadal nie znalazł emaili. Zatrzymuję szukanie, żeby nie przepalać API. Sprawdź target albo dodaj Google Search CX.` });
         break;
       }
-      const [industry, location] = pair.split("|||");
+      const { industry, location } = pair;
       let places: PlaceLead[] = [];
       try {
         const placesTimeoutMs = Math.min(7000, searchDeadlineMs - Date.now());
@@ -1246,6 +1270,35 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
         continue;
       }
 
+      const activeCampaign = campaign;
+      const targetPlaces = places.filter((place) => !shouldSkipPlaceByTarget(activeCampaign, place).skip);
+      const emailLookupDeadlineMs = Math.min(searchDeadlineMs - 10_500, Date.now() + 5_500);
+      if (targetPlaces.length && emailLookupDeadlineMs - Date.now() < 1_000) {
+        searchDeadlineReached = true;
+        await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Pozostało za mało czasu na sprawdzenie stron kontaktowych i bezpieczne przygotowanie wiadomości. Bot wróci do wyników w następnym cyklu." });
+        break searchLoop;
+      }
+      const emailLookupOutcomes = new Map<PlaceLead, { result?: EmailFinderResult; error?: unknown }>();
+      const emailLookupResults = await mapWithConcurrency(targetPlaces, 10, async (place) => {
+        try {
+          const result = await findBusinessEmail({
+            companyName: place.companyName,
+            website: place.website,
+            city: place.city,
+            googleSearchApiKey: secrets.googleSearch,
+            googleSearchCx: secrets.googleSearchCx,
+            deadlineMs: emailLookupDeadlineMs,
+            language: emailLanguageForCampaignLocation(activeCampaign.location_scope, activeCampaign.target_locations, place.city, place.address),
+          });
+          return { place, result };
+        } catch (error) {
+          return { place, error };
+        }
+      });
+      for (const outcome of emailLookupResults) {
+        emailLookupOutcomes.set(outcome.place, { result: outcome.result, error: outcome.error });
+      }
+
       for (const place of places) {
         if (stats.queuedEmails >= availableToday) break;
         if (Date.now() >= searchDeadlineMs) {
@@ -1270,15 +1323,9 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             continue;
           }
 
-          const emailResult = await findBusinessEmail({
-            companyName: place.companyName,
-            website: place.website,
-            city: place.city,
-            googleSearchApiKey: secrets.googleSearch,
-            googleSearchCx: secrets.googleSearchCx,
-            deadlineMs: searchDeadlineMs,
-            language: emailLanguageForCampaignLocation(campaign.location_scope, campaign.target_locations, place.city, place.address),
-          });
+          const emailLookup = emailLookupOutcomes.get(place);
+          if (emailLookup?.error) throw emailLookup.error;
+          const emailResult = emailLookup?.result || { email: null, source: "none" as const, checkedUrls: [] };
 
           if (Date.now() >= searchDeadlineMs - 1000) {
             searchDeadlineReached = true;
@@ -1317,7 +1364,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             continue;
           }
 
-          const auditTimeoutMs = Math.min(3500, searchDeadlineMs - Date.now());
+          const auditTimeoutMs = Math.min(2000, searchDeadlineMs - Date.now() - 7_500);
           if (auditTimeoutMs < 1000) {
             searchDeadlineReached = true;
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Za mało czasu pozostało na audyt strony. Bot wróci do tego zadania przy kolejnym uruchomieniu." });
@@ -1344,8 +1391,8 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             continue;
           }
 
-          const aiTimeoutMs = Math.min(7000, searchDeadlineMs - Date.now());
-          if (aiTimeoutMs < 4000) {
+          const aiTimeoutMs = Math.min(8500, searchDeadlineMs - Date.now() - 1_200);
+          if (aiTimeoutMs < 6500) {
             searchDeadlineReached = true;
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Pozostało za mało czasu na wygenerowanie bezpiecznej wiadomości. Bot dokończy ten lead przy kolejnym uruchomieniu." });
             break searchLoop;
@@ -1412,10 +1459,15 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
     // Wznawiamy kolejny element macierzy branża × lokalizacja; przy krótkim cyklu nie pomijamy
     // pozostałych branż dla tej samej lokalizacji ani lokalizacji dla tej samej branży.
     const queryAdvance = stats.searchedQueries;
-    const nextLocationIndex = rawLocations.length ? (rotatedLocations.start + (queryAdvance % rawLocations.length)) % rawLocations.length : 0;
-    const nextKeywordIndex = rawSearchTerms.length
-      ? (rotatedTerms.start + Math.floor(queryAdvance / Math.max(rawLocations.length, 1))) % rawSearchTerms.length
-      : 0;
+    const nextCursor = advanceCampaignSearchCursor({
+      industriesCount: rawSearchTerms.length,
+      locationsCount: rawLocations.length,
+      startIndustryIndex: rotatedTerms.start,
+      startLocationIndex: rotatedLocations.start,
+      processedPairs: queryAdvance,
+    });
+    const nextLocationIndex = nextCursor.locationIndex;
+    const nextKeywordIndex = nextCursor.industryIndex;
     const underTarget = stats.queuedEmails < availableToday;
     const plannedNextRunAt = (await dynamicScheduleForCampaign(campaign, { strictlyAfter: true })).nextRunAt;
     const retryMinutesRaw = Number(process.env.UNDER_TARGET_RETRY_MINUTES || 3);
