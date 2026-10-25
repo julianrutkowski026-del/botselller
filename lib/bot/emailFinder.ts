@@ -123,8 +123,8 @@ export async function findEmailWithGoogleSearch(args: {
   const website = normalizeUrl(args.website || null);
   const domain = website ? new URL(website).hostname.replace(/^www\./, "") : "";
   const query = domain
-    ? `site:${domain} ${terms.legal} ${terms.contact} ${terms.email}`
-    : `"${args.companyName}" ${terms.legal} ${terms.contact} ${terms.email} ${args.city || ""}`;
+    ? `site:${domain}`
+    : `"${args.companyName}" ${args.city || ""}`;
   const checkedUrls: string[] = [];
   const searchDeadline = Math.min(args.deadlineMs ?? Date.now() + 3500, Date.now() + 3500);
   const remainingMs = searchDeadline - Date.now();
@@ -134,6 +134,7 @@ export async function findEmailWithGoogleSearch(args: {
   url.searchParams.set("key", args.apiKey);
   url.searchParams.set("cx", args.cx);
   url.searchParams.set("q", query);
+  url.searchParams.set("orTerms", `${terms.legal} ${terms.contact} ${terms.email}`);
   url.searchParams.set("num", "5");
   url.searchParams.set("lr", `lang_${language}`);
 
@@ -156,8 +157,9 @@ export async function findEmailWithGoogleSearch(args: {
     .filter((link: string | null): link is string => Boolean(link)))
     .slice(0, 3);
   checkedUrls.push(...links);
-  const pageTimeoutMs = Math.max(250, Math.min(1000, searchDeadline - Date.now()));
-  if (pageTimeoutMs < 250) return { email: null, source: "none", checkedUrls };
+  const pageRemainingMs = searchDeadline - Date.now();
+  if (pageRemainingMs < 250) return { email: null, source: "none", checkedUrls };
+  const pageTimeoutMs = Math.min(1000, pageRemainingMs);
   const pages = await Promise.all(links.map(async (link: string) => {
     const html = await fetchText(link, pageTimeoutMs);
     return html ? pageEmails(html) : [];
