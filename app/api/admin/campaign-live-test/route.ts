@@ -5,6 +5,7 @@ import { verifyAdmin } from "@/lib/adminAuth";
 import { generateLeadWithAi } from "@/lib/bot/aiLead";
 import { findBusinessEmail } from "@/lib/bot/emailFinder";
 import { searchGooglePlaces, type PlaceLead } from "@/lib/bot/googlePlaces";
+import { emailLanguageForCampaignLocation, languageForLocation } from "@/lib/locationOptions";
 import { buildLeadEmailHtml, buildLeadEmailText, buildSenderPersona } from "@/lib/bot/mailer";
 import { getSendCapacity, requiredCampaignNumber, requiredCampaignTimeZone } from "@/lib/bot/sendSafety";
 import { auditWebsite } from "@/lib/bot/websiteAudit";
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
 
     const industry = pickSearchIndustry(campaign);
     const location = pickSearchLocation(campaign);
-    const places = await searchGooglePlaces({ apiKey: secrets.googlePlaces, industry, location, limit: 5, languageCode: "pl" });
+    const places = await searchGooglePlaces({ apiKey: secrets.googlePlaces, industry, location, limit: 5, languageCode: languageForLocation(location) });
     const attempts: Array<Record<string, unknown>> = [];
 
     for (const place of places) {
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
         city: place.city,
         googleSearchApiKey: secrets.googleSearch,
         googleSearchCx: secrets.googleSearchCx,
+        language: emailLanguageForCampaignLocation(campaign.location_scope, campaign.target_locations, place.city, place.address),
       });
       attempts.push({ companyName: place.companyName, website: place.website, city: place.city, email: emailResult.email, emailSource: emailResult.source, checkedUrls: emailResult.checkedUrls });
       if (!emailResult.email) continue;

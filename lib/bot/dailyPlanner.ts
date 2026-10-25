@@ -8,6 +8,7 @@ import { findBusinessEmail } from "@/lib/bot/emailFinder";
 import { isValidRecipientEmail, normalizeEmailCandidate } from "@/lib/bot/emailValidation";
 import { googlePlacesAccessHelp, isGooglePlacesAccessBlocked, searchGooglePlaces, type PlaceLead } from "@/lib/bot/googlePlaces";
 import { expandCampaignLocations, languageForLocation } from "@/lib/bot/locationPresets";
+import { emailLanguageForCampaignLocation } from "@/lib/locationOptions";
 import { getSendCapacity } from "@/lib/bot/sendSafety";
 import {
   isSportsOrganizationOnlyTarget,
@@ -49,6 +50,7 @@ export type DailyPlanStats = {
   emailsFound: number;
   queuedEmails: number;
   queueFailures: number;
+  processingFailures: number;
   errors: string[];
   dailyLimit: number;
   alreadyQueuedToday: number;
@@ -64,6 +66,7 @@ function emptyStats(): DailyPlanStats {
     emailsFound: 0,
     queuedEmails: 0,
     queueFailures: 0,
+    processingFailures: 0,
     errors: [],
     dailyLimit: 0,
     alreadyQueuedToday: 0,
@@ -492,7 +495,9 @@ async function finishRun(runId: string | null, stats: DailyPlanStats, status: "c
       emails_found: stats.emailsFound,
       drafts_created: stats.queuedEmails,
       sent_emails: 0,
-      send_failures: stats.queueFailures,
+      // This planner prepares queue items; actual send failures belong to the
+      // queue worker and must not be inferred from lookup or enqueue failures.
+      send_failures: 0,
       errors: stats.errors,
     })
     .eq("id", runId);
@@ -1248,6 +1253,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
           await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Limit czasu pojedynczego cyklu minął podczas sprawdzania kandydatów. Następny cron zacznie od kolejnego zapytania/kandydata." });
           break searchLoop;
         }
+        let failureStage = "email_lookup";
         try {
           const targetSkip = shouldSkipPlaceByTarget(campaign, place);
           if (targetSkip.skip) {
@@ -1271,6 +1277,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             googleSearchApiKey: secrets.googleSearch,
             googleSearchCx: secrets.googleSearchCx,
             deadlineMs: searchDeadlineMs,
+            language: emailLanguageForCampaignLocation(campaign.location_scope, campaign.target_locations, place.city, place.address),
           });
 
           if (Date.now() >= searchDeadlineMs - 1000) {
@@ -1285,6 +1292,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             continue;
           }
 
+          failureStage = "email_validation";
           const recipientEmail = normalizeEmailCandidate(emailResult.email);
           if (!isValidRecipientEmail(recipientEmail)) {
             stats.missingEmail += 1;
@@ -1293,6 +1301,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
           }
           stats.emailsFound += 1;
 
+          failureStage = "suppression_check";
           const isSuppressed = await suppressionMatch({ clientId: campaign.client_id, email: recipientEmail, website: place.website, companyName: place.companyName });
           if (isSuppressed) {
             stats.skippedDuplicates += 1;
@@ -1300,6 +1309,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             continue;
           }
 
+          failureStage = "duplicate_check";
           const duplicate = await duplicateExists({ clientId: campaign.client_id, campaignId: campaign.id, companyName: place.companyName, googleMapsUrl: place.googleMapsUrl, website: place.website, email: recipientEmail });
           if (duplicate) {
             stats.skippedDuplicates += 1;
@@ -1313,6 +1323,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Za mało czasu pozostało na audyt strony. Bot wróci do tego zadania przy kolejnym uruchomieniu." });
             break searchLoop;
           }
+          failureStage = "website_audit";
           const audit = await auditWebsite(place.website, auditTimeoutMs);
           if (Date.now() >= searchDeadlineMs - 1000) {
             searchDeadlineReached = true;
@@ -1339,6 +1350,7 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             await logRun({ runId, campaign, level: "warning", stage: "search_deadline", message: "Pozostało za mało czasu na wygenerowanie bezpiecznej wiadomości. Bot dokończy ten lead przy kolejnym uruchomieniu." });
             break searchLoop;
           }
+          failureStage = "ai_generation";
           const generated = await generateLeadWithAi({ apiKey: openaiApiKey, model: botApi.model, client: campaign.client_accounts, campaign, place, email: recipientEmail, audit, timeoutMs: aiTimeoutMs });
           const minQualifiedScore = minimumQualifiedLeadScore(campaign);
           if (generated.score < minQualifiedScore) {
@@ -1358,11 +1370,13 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
 
           const trackingId = crypto.randomUUID();
           if (campaign.requires_approval_before_send) {
+            failureStage = "approval_draft";
             await createApprovalDraft({ campaign, place, leadPayload, email: recipientEmail, subject: generated.subject, body: generated.body, trackingId });
             slotIndex += 1;
             stats.queuedEmails += 1;
             await logRun({ runId, campaign, stage: "approval_draft", message: `Przygotowano mail do ${place.companyName}. Czeka na akceptację klienta w panelu klienta.` });
           } else {
+            failureStage = "queue_insert";
             const { error: queueError } = await db.from("send_queue").insert({
               client_id: campaign.client_id,
               campaign_id: campaign.id,
@@ -1387,9 +1401,10 @@ export async function planCampaignDay(campaignId: string, options: { requestedLi
             break searchLoop;
           }
           const message = `${place.companyName}: ${errorMessage(error, "błąd planowania leada")}`;
-          stats.queueFailures += 1;
+          stats.processingFailures += 1;
+          if (failureStage === "queue_insert" || failureStage === "approval_draft") stats.queueFailures += 1;
           stats.errors.push(message);
-          await logRun({ runId, campaign, level: "error", stage: "queue", message, metadata: { place } });
+          await logRun({ runId, campaign, level: "error", stage: failureStage, message, metadata: { place } });
         }
       }
     }

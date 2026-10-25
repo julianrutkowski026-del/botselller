@@ -524,7 +524,7 @@ export default function AdminApp() {
     try {
       const token = await accessToken();
       setRunningCampaignId(campaignId);
-      setNotice({ tone: "info", message: "Bot ruszył. Szuka firm, maili, robi audyt, generuje wiadomości i automatycznie wysyła według limitu kampanii. To może potrwać kilkadziesiąt sekund." });
+      setNotice({ tone: "info", message: "Bot sprawdza firmy, adresy i dopasowanie, a zakwalifikowane wiadomości dodaje do kolejki. Sama wysyłka odbywa się osobno według harmonogramu." });
       const result = await fetch(`/api/campaigns/${campaignId}/run`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -536,23 +536,23 @@ export default function AdminApp() {
             searchedQueries: number;
             foundPlaces: number;
             skippedDuplicates: number;
-            insertedLeads: number;
             emailsFound: number;
-            draftsCreated: number;
+            queuedEmails: number;
+            queueFailures: number;
+            processingFailures: number;
             missingEmail: number;
-            belowScore: number;
-            sendAttempts: number;
-            sentEmails: number;
-            sendFailures: number;
             errors: string[];
           };
         }>(response),
       );
       await loadAll(token);
       if (selectedClientId) await refreshClientDetails(selectedClientId, token).catch(() => undefined);
+      const queued = result.stats.queuedEmails || 0;
+      const failures = result.stats.processingFailures || 0;
+      const summary = `Bot zakończył cykl: ${queued} wiadomości dodanych do kolejki (to nie oznacza, że zostały już wysłane). Google sprawdziło ${result.stats.searchedQueries} zapytań i zwróciło ${result.stats.foundPlaces} firm. Bez znalezionego adresu: ${result.stats.missingEmail}. Pominięte duplikaty/listy blokad: ${result.stats.skippedDuplicates}. Błędy przygotowania: ${failures}.`;
       setNotice({
-        tone: "success",
-        message: `Bot zakończył pracę: ${result.stats.sentEmails} wysłanych maili i ${result.stats.insertedLeads} zapisanych leadów. Bez emaila pominięto: ${result.stats.missingEmail}. Błędy wysyłki: ${result.stats.sendFailures}. Duplikaty: ${result.stats.skippedDuplicates}.`,
+        tone: queued > 0 && failures === 0 ? "success" : "warning",
+        message: summary,
       });
     } catch (error) {
       setNotice({ tone: "danger", message: errorMessage(error) });
