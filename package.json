@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "test:scheduler": "node tests/scheduler-math.test.mjs",
-    "test": "npm run test:scheduler && npm run test:guards && node tests/netlify-cron.test.mjs && node tests/sports-buyer-target.test.mjs && node tests/search-cursor.test.mjs && node tests/lead-candidate-priority.test.mjs",
+    "test": "npm run test:scheduler && npm run test:guards && node tests/netlify-cron.test.mjs && node tests/sports-buyer-target.test.mjs && node tests/search-cursor.test.mjs && node tests/lead-candidate-priority.test.mjs && node tests/german-salesbot-flow.test.mjs",
     "test:guards": "node tests/production-guards.test.mjs",
     "typecheck": "tsc --noEmit",
     "predeploy": "npm test && npm run typecheck && npm run build"

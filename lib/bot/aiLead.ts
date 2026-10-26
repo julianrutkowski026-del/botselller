@@ -30,6 +30,44 @@ function clean(value: string | null | undefined) {
   return value?.trim() || "";
 }
 
+function campaignPrimaryTarget(campaign: Campaign) {
+  return [
+    campaign.search_keywords,
+    ...(campaign.target_industries || []),
+    campaign.exact_target_business_type,
+    campaign.target_audience_niche,
+  ].filter(Boolean).join("\n");
+}
+
+function normalizeOfferText(value: string) {
+  return value
+    .normalize("NFD")
+    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ł/g, "l")
+    .replace(/ß/g, "ss");
+}
+
+function isSportswearCampaign(campaign: Campaign) {
+  if (!isSportsOrganizationOnlyTarget(campaignPrimaryTarget(campaign))) return false;
+  const offerText = normalizeOfferText([
+    campaign.offer_description,
+    campaign.client_business_description,
+    campaign.promoted_service,
+    campaign.value_proposition,
+  ].filter(Boolean).join(" "));
+  return /\b(odziez\w*|ubran\w*|stroj\w*|sportbekleidung\w*|bekleidung\w*|teamwear\w*|sportswear\w*|trikot\w*|sports kit\w*|team uniform\w*)\b/.test(offerText);
+}
+
+const GERMAN_SPORTSWEAR_FALLBACK = () =>
+  `Guten Tag,\n\nunsere Teamwear gestalten wir vollständig nach Ihren Wünschen und den Vereinsfarben. Je nach Artikel veredeln wir sie im Sublimations- oder DTF-Druck; Namen, Rückennummern und weitere Details lassen sich individuell umsetzen. Auf Wunsch entwerfen wir außerdem das passende Grafikdesign. Falls später noch etwas fehlt, können einzelne Teile bereits ab einem Stück nachbestellt werden.\n\nWäre das für Ihre Mannschaft interessant? Gern sende ich Ihnen weitere Informationen.`;
+
+const GERMAN_SPORTSWEAR_PROMPT = `
+
+PERSÖNLICHE ANSPRACHE: Schreibe keine austauschbare Standardmail und beginne nicht mit einer bloßen Produktliste. Starte mit einem konkreten, belegten Bezug zu genau diesem Verein, der aus Website, Lead-Daten oder Prüfung hervorgeht, zum Beispiel zu einer erkennbaren Mannschaft, Sportart oder Nachwuchsabteilung. Stelle den Absender kurz und natürlich mit dem in der Persona hinterlegten Namen und der Firma vor; erfinde keine Personendaten und wiederhole keine Signatur. Erkläre, warum die Teamwear für diesen Verein nützlich sein könnte: ein stimmiger Auftritt in den Vereinsfarben, individuelle Namen und Rückennummern sowie unkomplizierte Ergänzungen, wenn später ein einzelnes Teil oder eine zusätzliche Größe gebraucht wird. Formuliere vermuteten Bedarf als Möglichkeit oder Frage, nicht als bekannte Tatsache.
+
+BESTÄTIGTE PRODUKTVORTEILE FÜR DIESE TEAMWEAR-KAMPAGNE: Integriere alle Punkte natürlich und kompakt in den Mailtext, nicht als Aufzählung. Die Teamwear wird vollständig nach den Wünschen und Vereinsfarben des Clubs gestaltet. Je nach Artikel kommt Sublimations- oder DTF-Druck zum Einsatz; Namen, Rückennummern und weitere Details lassen sich individuell umsetzen. Auf Wunsch kann außerdem das passende Grafikdesign entworfen werden. Einzelne Teile sind später bereits ab einem Stück nachbestellbar. Eine mögliche Formulierung: „Unsere Teamwear gestalten wir vollständig nach Ihren Wünschen und den Vereinsfarben. Je nach Artikel veredeln wir sie im Sublimations- oder DTF-Druck; Namen, Rückennummern und weitere Details lassen sich individuell umsetzen. Auf Wunsch entwerfen wir außerdem das passende Grafikdesign. Falls später noch etwas fehlt, können einzelne Teile bereits ab einem Stück nachbestellt werden.“ Behaupte keine Preise, Lieferzeiten oder kostenlosen Leistungen, die in der Kampagne nicht genannt sind.`;
+
 function sampleStyleBlock(sample: string | null | undefined) {
   const cleaned = clean(sample);
   if (!cleaned) return "Brak przykładowego maila. Zastosuj ton kampanii i pisz naturalnie.";
@@ -117,12 +155,16 @@ function fallbackLead(args: { client: ClientAccount; campaign: Campaign; place: 
   const score = hasEmail ? 2 : 0;
   const language = emailLanguageForCampaignLocation(args.campaign.location_scope, args.campaign.target_locations, args.place.city, args.place.address);
   const copy = FALLBACK_COPY[language] || FALLBACK_COPY.en!;
+  const sportswearCampaign = language === "de" && isSportswearCampaign(args.campaign);
+  const body = sportswearCampaign
+    ? GERMAN_SPORTSWEAR_FALLBACK()
+    : copy.body(args.client.company_name);
   return {
     score,
     mainProblem: copy.problem,
     aiSummary: copy.summary,
-    subject: copy.subject,
-    body: copy.body(args.client.company_name),
+    subject: sportswearCampaign ? "Individuelle Teamwear für Ihren Verein" : copy.subject,
+    body,
     language,
   };
 }
@@ -181,14 +223,12 @@ export async function generateLeadWithAi(args: {
   const messageLanguage = emailLanguageForCampaignLocation(args.campaign.location_scope, args.campaign.target_locations, args.place.city, args.place.address);
   const languageName = EMAIL_LANGUAGE_NAMES[messageLanguage];
   const languageInstruction = `Napisz całą wiadomość w języku ${languageName}. Dotyczy to tematu, treści, powodu kontaktu i podsumowania AI.`;
-  const primaryTarget = [
-    args.campaign.search_keywords,
-    ...(args.campaign.target_industries || []),
-    args.campaign.exact_target_business_type,
-    args.campaign.target_audience_niche,
-  ].filter(Boolean).join("\n");
+  const primaryTarget = campaignPrimaryTarget(args.campaign);
   const sportsBuyerInstruction = isSportsOrganizationOnlyTarget(primaryTarget)
     ? `\nTWARDY FILTR KAMPANII: szukamy wyłącznie klubów sportowych, akademii sportowych i drużyn sportowych. Lead musi być takim zespołem lub organizacją, która może zamawiać stroje dla własnych zawodników. Agencja eventowa, sala koncertowa, centrum konferencyjne, hotel, firma kupująca ubrania dla pracowników ani organizator wydarzeń bez własnej drużyny sportowej nie pasują: wystaw score 0-2 i nie pisz do nich oferty. Wiadomość ma dotyczyć strojów meczowych/treningowych dla zawodników, nie ubrań na event lub merchu.`
+    : "";
+  const sportswearOfferInstruction = messageLanguage === "de" && isSportswearCampaign(args.campaign)
+    ? GERMAN_SPORTSWEAR_PROMPT
     : "";
 
   const prompt = `
@@ -251,6 +291,7 @@ Audyt automatyczny strony:
 
 Zadanie:
 ${sportsBuyerInstruction}
+${sportswearOfferInstruction}
 1. Oceń jakość leada od 0 do 10 dla tej kampanii. Źródłem prawdy jest wyłącznie opis targetu wpisany w kampanii: „Szukane branże”, „Jakich firm szukamy”, „Konkretny typ firm”, „Nisza”, „Słowa kluczowe”, „Sygnały wymagane”, „Zasady kwalifikacji” i „Wykluczenia”.
 2. NIE MYL klienta z targetem. „Czym zajmuje się klient”, „Oferta klienta” i „Promowana usługa” opisują NADAWCĘ oraz produkt, a nie firmy, których bot ma szukać.
 3. Jeśli kampania szuka klubów, akademii, szkół, marek lub organizacji sportowych, lead musi wyglądać jak taki kupujący. Szkółka drzew/krzewów/roślin, centrum ogrodnicze, gospodarstwo szkółkarskie, sklep sportowy, hurtownia, drukarnia, szwalnia albo producent odzieży ma dostać score 0-2, chyba że kampania literalnie wskazuje taki typ jako target.

@@ -25,6 +25,8 @@ assert.equal(rules.matchesSportsOrganizationTarget(target, "Köln · Fußballman
 assert.equal(rules.matchesSportsOrganizationTarget(germanTarget, "FC Bayern München · Fußballverein"), true);
 assert.equal(rules.matchesSportsOrganizationTarget(germanTarget, "Sportakademie Berlin"), true);
 assert.equal(rules.matchesSportsOrganizationTarget(germanTarget, "SV Babelsberg · Sportmannschaft"), true);
+assert.equal(rules.matchesSportsOrganizationTarget(germanTarget, "FC Sportfreunde München e.V."), true);
+assert.equal(rules.matchesSportsOrganizationTarget(germanTarget, "Fußball TSV Turnerbund München e.V."), true);
 assert.equal(rules.matchesSportsOrganizationTarget(germanTarget, "Meyer Eventagentur · sports event team"), false);
 assert.equal(rules.matchesSportsOrganizationTarget(target, "Meyer Eventagentur · sports event team"), false);
 assert.equal(rules.matchesSportsOrganizationTarget(target, "Nürnberg Convention Center · event venue · sports events"), false);
